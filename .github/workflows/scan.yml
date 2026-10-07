@@ -4,6 +4,7 @@
 name: Scan and deploy Pages
 
 on:
+  pull_request:
   schedule:
     # B3 session ~10:30–17:00 America/Sao_Paulo (UTC-3, no DST) on weekdays.
     - cron: "30 13 * * 1-5" # 10:30 BRT
@@ -26,7 +27,26 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  unit:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Unit tests (no extra deps)
+        run: python3 -m unittest tests.test_b3_calendar tests.test_b3_site -v
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+      - name: Screener unit tests
+        run: python -m unittest tests.test_screener_chart tests.test_screener_filters -v
+
   scan:
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     outputs:
