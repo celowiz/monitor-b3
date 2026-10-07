@@ -1,0 +1,16 @@
+# Seeded from the local scanner (requirements-partial.txt) + yfinance.
+# Pin exact versions so GitHub Actions matches the working machine.
+beautifulsoup4==4.15.0
+curl_cffi==0.16.3
+lxml==6.1.3
+multitasking==0.0.13
+numpy==2.5.3
+pandas==3.0.6
+peewee==4.5.2
+platformdirs==4.12.3
+playwright==1.63.0
+protobuf==7.36.2
+pytz==2026.5
+requests==2.34.2
+websockets==17.2
+yfinance==1.7.0
