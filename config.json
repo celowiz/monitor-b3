@@ -1,0 +1,30 @@
+{
+  "universe_source": "brapi.dev /api/v2/tickers?type=stock + config bdr_allowlist",
+  "universe_notes": "Free public ticker catalog. Keep assetType=stock with subType stock|unit. Tickers matching XXXX + ending 3|4|5|6|11. Exclude fractional (*F), ETFs, FIIs and other funds from the stock feed. BDRs are NOT taken from type=bdr wholesale — only tickers listed in bdr_allowlist are added.",
+  "bdr_allowlist": [
+    "INBR32",
+    "ROXO34",
+    "XPBR31",
+    "STOC34",
+    "PAGS34",
+    "A2FY34",
+    "V2TX34",
+    "P2AX34",
+    "S2GM34",
+    "MELI34",
+    "JBSS32",
+    "AURA33"
+  ],
+  "filters": {
+    "liq21_min_brl": 5000000,
+    "high_lookback_sessions": 252,
+    "liq_lookback_sessions": 21
+  },
+  "yfinance": {
+    "period": "13mo",
+    "auto_adjust": true,
+    "chunk_size": 40,
+    "threads": true
+  },
+  "ticker_endings": ["3", "4", "5", "6", "11"]
+}

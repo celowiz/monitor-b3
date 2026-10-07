@@ -1,0 +1,134 @@
+# Scan B3 + publish the latest monitor to GitHub Pages.
+# Deploy only runs after a successful screener. A failed yfinance download
+# fails this workflow WITHOUT uploading an artifact, so the previous site stays up.
+name: Scan and deploy Pages
+
+on:
+  pull_request:
+  schedule:
+    # B3 session ~10:30–17:00 America/Sao_Paulo (UTC-3, no DST) on weekdays.
+    - cron: "30 13 * * 1-5" # 10:30 BRT
+    - cron: "0,30 14-19 * * 1-5" # 11:00–16:30 BRT
+    - cron: "0 20 * * 1-5" # 17:00 BRT
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Rodar mesmo em feriado, fim de semana ou antes do horário especial"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  unit:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Unit tests (no extra deps)
+        run: python3 -m unittest tests.test_b3_calendar tests.test_b3_site -v
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+      - name: Screener unit tests
+        run: python -m unittest tests.test_screener_chart tests.test_screener_filters -v
+
+  scan:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    outputs:
+      skip: ${{ steps.cal.outputs.skip }}
+    env:
+      SITE_DIR: site
+      CACHE_DIR: .cache
+      PAGES_BASE_URL: https://celowiz.github.io/monitor-b3
+      PYTHONUNBUFFERED: "1"
+      PREVIEW_KEEP_DAYS: "7"
+      FORCE_RUN: ${{ github.event.inputs.force || 'false' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Unit tests (no extra deps)
+        run: python3 -m unittest tests.test_b3_calendar tests.test_b3_site -v
+
+      - name: Check B3 calendar
+        id: cal
+        run: python3 b3_calendar.py --github-output
+
+      - name: Set up Python
+        if: success() && steps.cal.outputs.skip != 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Restore scanner cache and preview history
+        if: success() && steps.cal.outputs.skip != 'true'
+        uses: actions/cache@v4
+        with:
+          path: |
+            .cache
+            site/previews
+          key: monitor-b3-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: |
+            monitor-b3-${{ runner.os }}-
+
+      - name: Install Python dependencies
+        if: success() && steps.cal.outputs.skip != 'true'
+        run: pip install -r requirements.txt
+
+      - name: Screener unit tests
+        if: success() && steps.cal.outputs.skip != 'true'
+        run: python -m unittest tests.test_screener_chart tests.test_screener_filters -v
+
+      - name: Install Playwright Chromium
+        if: success() && steps.cal.outputs.skip != 'true'
+        run: python -m playwright install --with-deps chromium
+
+      - name: PNG path smoke test
+        if: success() && steps.cal.outputs.skip != 'true'
+        run: python -m unittest tests.test_preview_png -v
+
+      - name: Run screener
+        if: success() && steps.cal.outputs.skip != 'true'
+        run: python screener.py --site-dir site --cache-dir .cache
+
+      - name: Require index.html before publish
+        if: success() && steps.cal.outputs.skip != 'true'
+        run: test -f site/index.html && test -f site/last_run.json
+
+      - name: Setup Pages
+        if: success() && steps.cal.outputs.skip != 'true'
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        if: success() && steps.cal.outputs.skip != 'true'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: scan
+    if: needs.scan.result == 'success' && needs.scan.outputs.skip != 'true'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5

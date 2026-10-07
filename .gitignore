@@ -1,0 +1,13 @@
+.venv/
+venv/
+__pycache__/
+.pytest_cache/
+.cache/
+site/
+*.pyc
+.playwright/
+playwright-report/
+.DS_Store
+.env
+*.egg-info/
+.python-version
