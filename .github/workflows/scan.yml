@@ -50,7 +50,7 @@ jobs:
           cache-dependency-path: web/package-lock.json
       - name: Build do app
         working-directory: web
-        run: npm ci && npm run build
+        run: npm ci && npm test && npm run build
 
   scan:
     runs-on: ubuntu-latest
@@ -92,7 +92,7 @@ jobs:
       - name: Build do app
         if: steps.cal.outputs.skip != 'true'
         working-directory: web
-        run: npm ci && npm run build && touch dist/.nojekyll
+        run: npm ci && npm test && npm run build && touch dist/.nojekyll
 
       - name: Exigir dados antes de publicar
         if: steps.cal.outputs.skip != 'true'
