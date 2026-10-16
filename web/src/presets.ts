@@ -1,8 +1,9 @@
+import { migrateScreen } from "./graph";
 import { BlockType, Screen, makeBlock } from "./engine";
 
 export interface Preset { id: string; name: string; desc: string; build: (liqMin: number) => Screen }
 const base = (liq: number, kinds = ["acao", "bdr"]) => [makeBlock("universe", true, { kinds }), makeBlock("liquidity", true, { min: liq }), makeBlock("minPrice", true, { min: 1 })];
-const scr = (name: string, combine: "and" | "or", blocks: ReturnType<typeof makeBlock>[]): Screen => ({ name, combine, blocks, builtin: true });
+const scr = (name: string, combine: "and" | "or", blocks: ReturnType<typeof makeBlock>[]): Screen => migrateScreen({ name, combine, blocks, edges: [], builtin: true });
 const sig = (t: BlockType, p?: Record<string, any>) => makeBlock(t, true, p);
 
 export const PRESETS: Preset[] = [

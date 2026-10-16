@@ -60,10 +60,11 @@ export default function Results({ runId, done, ev, total, failed, selected, onSe
       <div className="funnel">
         <div><b className="mono">{total}</b><span>universo</span></div>
         <div><b className="mono">{ev.filtered.length}</b><span>após filtros</span></div>
-        <div><b className="mono">{done ? ev.results.length : "…"}</b><span>após sinais</span></div>
+        <div><b className="mono">{!ev.complete ? "–" : done ? ev.results.length : "…"}</b><span>resultado</span></div>
         <div title={failed.join(", ")}><b className="mono">{failed.length}</b><span>falha{failed.length === 1 ? "" : "s"}{failed.length ? ` (${failed.slice(0, 3).join(", ")}${failed.length > 3 ? "…" : ""})` : ""}</span></div>
       </div>
-      {done && !sorted.length && <div className="empty">Nenhum ativo passa nesta tela agora. Afrouxe filtros, troque E por OU ou desligue algum sinal.</div>}
+      {!ev.complete && <div className="empty">Grafo incompleto: {ev.problems.map((p) => p.msg).join("; ")}. Conecte os blocos para ver os resultados.</div>}
+      {ev.complete && done && !sorted.length && <div className="empty">Nenhum ativo passa nesta tela agora. Afrouxe filtros, troque E por OU ou desligue algum sinal.</div>}
       {compact ? (
         <div className="cards" key={runId}>
           {shown.map((r, i) => (

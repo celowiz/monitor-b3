@@ -4,23 +4,27 @@ import { defaultScreen, evaluate, Row } from "../engine";
 import { PRESETS } from "../presets";
 import { toCsv } from "../csv";
 
-const strip = (s: any) => ({ ...s, builtin: undefined, blocks: s.blocks.map((b: any) => ({ type: b.type, enabled: b.enabled, params: b.params, pos: b.pos })) });
+const strip = (s: any) => {
+  const ix = new Map(s.blocks.map((b: any, i: number) => [b.id, i]));
+  return { name: s.name, blocks: s.blocks.map((b: any) => ({ type: b.type, enabled: b.enabled, params: b.params, pos: b.pos })), edges: s.edges.map((e: any) => [ix.get(e.source), ix.get(e.target)]) };
+};
 
 describe("share", () => {
   it("round-trips every preset and default", async () => {
     for (const s of [defaultScreen(), ...PRESETS.map((p) => p.build(5e6))]) {
       s.blocks[1].pos = { x: 10, y: 20 };
       const tok = await encodeScreen(s);
-      expect(tok).toMatch(/^1z\.[A-Za-z0-9_-]+$/);
+      expect(tok).toMatch(/^2z\.[A-Za-z0-9_-]+$/);
       expect(strip(await decodeScreen(tok))).toEqual(strip(s));
     }
   });
-  it("is compact", async () => { expect((await encodeScreen(defaultScreen())).length).toBeLessThan(250); });
+  it("is compact", async () => { expect((await encodeScreen(defaultScreen())).length).toBeLessThan(400); });
   it("degrades gracefully", async () => {
     for (const t of ["", "garbage", "9z.abc", "1z.!!!", "1j.e30", "1z.AAAA"]) expect(await decodeScreen(t)).toBeNull();
     const tok = "1j." + btoa(JSON.stringify({ v: 1, n: "x", c: "o", b: [["nope", 1, {}], ["rsi", 1, { low: 25 }]] })).replace(/=+$/, "");
     const s = (await decodeScreen(tok))!;
-    expect(s.combine).toBe("or"); expect(s.blocks.map((b) => b.type)).toEqual(["universe", "rsi"]); expect(s.blocks[1].params.low).toBe(25);
+    expect(s.blocks.map((b) => b.type)).toEqual(["universe", "rsi", "result"]); expect(s.blocks[1].params.low).toBe(25);
+    expect(s.edges.length).toBe(2);
   });
   it("reads hash", () => { expect(tokenFromHash("#t=1z.abc")).toBe("1z.abc"); expect(tokenFromHash("")).toBeNull(); });
 });
