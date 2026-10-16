@@ -128,7 +128,7 @@ tbody tr{cursor:pointer}tbody tr:hover{background:var(--bg2)}tbody tr.sel{backgr
 .st-error .bn-n{color:var(--dn)}
 .react-flow__edge-path.fe{stroke-width:1.4;transition:stroke .2s}
 .fe-idle{stroke:#30363b!important;stroke-dasharray:4 4}
-.fe-off{stroke:#262a2e!important;stroke-dasharray:2 5}
+.fe-off{stroke:#5a6268!important;stroke-dasharray:3 4;opacity:.9}
 .fe-running{stroke:var(--teal)!important;stroke-dasharray:6 4;animation:dash .5s linear infinite,blink .5s ease-in-out infinite}
 .fe-success{stroke:#3fbf7f!important;opacity:.85}
 .fe-error{stroke:var(--dn)!important}
