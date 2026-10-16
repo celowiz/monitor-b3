@@ -1,0 +1,116 @@
+# Gera os dados do painel (latest.json + candles) e publica o app Vite no GitHub Pages.
+# Os dados vão só no artefato do Pages (não são commitados), então o histórico do repo não cresce.
+# Se a geração falhar, nada é publicado e o site anterior continua no ar.
+name: Scan and deploy Pages
+
+on:
+  pull_request:
+  schedule:
+    # B3 session ~10:30–17:00 America/Sao_Paulo (UTC-3, no DST) on weekdays.
+    - cron: "30 13 * * 1-5" # 10:30 BRT
+    - cron: "0,30 14-19 * * 1-5" # 11:00–16:30 BRT
+    - cron: "0 20 * * 1-5" # 17:00 BRT
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Rodar mesmo em feriado, fim de semana ou antes do horário especial"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  unit:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Unit tests (calendário)
+        run: python3 -m unittest tests.test_b3_calendar tests.test_b3_site -v
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Unit tests (indicadores + screener legado)
+        run: python -m unittest tests.test_build_data tests.test_screener_chart tests.test_screener_filters -v
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Build do app
+        working-directory: web
+        run: npm ci && npm run build
+
+  scan:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      skip: ${{ steps.cal.outputs.skip }}
+    env:
+      PYTHONUNBUFFERED: "1"
+      FORCE_RUN: ${{ github.event.inputs.force || 'false' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check B3 calendar
+        id: cal
+        run: python3 b3_calendar.py --github-output
+
+      - uses: actions/setup-python@v5
+        if: steps.cal.outputs.skip != 'true'
+        with:
+          python-version: "3.12"
+          cache: pip
+      - if: steps.cal.outputs.skip != 'true'
+        run: pip install -r requirements.txt
+      - name: Unit tests
+        if: steps.cal.outputs.skip != 'true'
+        run: python -m unittest tests.test_b3_calendar tests.test_build_data -v
+
+      - name: Gerar dados (brapi + yfinance + carteiras B3)
+        if: steps.cal.outputs.skip != 'true'
+        run: python scripts/build_data.py --out web/public/data
+
+      - uses: actions/setup-node@v4
+        if: steps.cal.outputs.skip != 'true'
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Build do app
+        if: steps.cal.outputs.skip != 'true'
+        working-directory: web
+        run: npm ci && npm run build && touch dist/.nojekyll
+
+      - name: Exigir dados antes de publicar
+        if: steps.cal.outputs.skip != 'true'
+        run: test -f web/dist/index.html && test -f web/dist/data/latest.json
+
+      - uses: actions/configure-pages@v5
+        if: steps.cal.outputs.skip != 'true'
+      - uses: actions/upload-pages-artifact@v3
+        if: steps.cal.outputs.skip != 'true'
+        with:
+          path: web/dist
+
+  deploy:
+    needs: scan
+    if: needs.scan.result == 'success' && needs.scan.outputs.skip != 'true'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5

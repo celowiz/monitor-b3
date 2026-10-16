@@ -1,83 +1,60 @@
-# Monitor B3
+# Monitor B3 · construtor de telas
 
-Ferramenta educacional que lista ações (e BDRs da allowlist) da B3 com liquidez de 21 pregões acima de R$ 5 milhões **e** preço acima da máxima dos 252 pregões anteriores (excluindo o candle atual).
+Painel educacional em blocos (estilo n8n, React Flow) para montar telas de **ações (incl. units), BDRs da allowlist, ETFs e FIIs do IFIX** combinando filtros e sinais. Toda a filtragem roda no navegador.
 
 **Site:** https://celowiz.github.io/monitor-b3/
 
-**Isto não é recomendação de investimento, oferta ou solicitação de compra ou venda de valores mobiliários.** Use só para estudo.
+**Conteúdo educativo, não é recomendação de investimento.**
 
-## Como funciona
+## Arquitetura (custo zero)
 
-1. Universo: catálogo público [brapi.dev](https://brapi.dev/api/v2/tickers?type=stock) (`assetType=stock`, papéis `XXXX` + final `3|4|5|6|11`). ETFs, FIIs e BDRs em massa ficam de fora. BDRs entram **somente** pela `bdr_allowlist` em `config.json`.
-2. Preços e histórico: [yfinance](https://github.com/ranaroussi/yfinance) (`TICKER.SA`, `auto_adjust`).
-3. Filtros (iguais ao scanner local):
-   - `liq21 > R$ 5.000.000` (média Close × Volume em 21 sessões)
-   - `preço > máxima de 252 sessões`, **sem** o candle que está sendo avaliado
-4. GitHub Actions gera o site estático e publica no GitHub Pages (custo zero). Não há Vercel, Railway, APIs pagas nem worker de refresh.
+- `scripts/build_data.py` (GitHub Actions, ~30 min no pregão, dias úteis, pula feriados B3 via `b3_calendar.py`) gera:
+  - `data/latest.json`: universo + indicadores por ticker, `failedTickers`, horário da rodada.
+  - `data/candles/<TICKER>.json`: ~1 ano de candles diários + SMA50/SMA200/máx. 52s, carregado sob demanda.
+- `web/`: Vite + React + TypeScript + `@xyflow/react` + `lightweight-charts`, base `/monitor-b3/`.
+- Os dados vão **só no artefato do Pages** (nada é commitado a cada rodada). Falha na geração = nada publicado, site anterior continua no ar.
+- Telas salvas ficam no `localStorage` do navegador (sem cadastro).
 
-Artefatos estáveis na raiz do site:
+## Universo
 
-| Arquivo | Conteúdo |
+| Tipo | Regra |
 | --- | --- |
-| `index.html` | Gráfico interativo da última rodada |
-| `last_run.json` | Resultado estruturado da última rodada |
-| `last_message.md` | Tabela em Markdown |
-| `last_previews.json` | Caminhos relativos dos PNGs |
-| `previews/YYYY-MM-DD/HH-MM/NN_TICKER.png` | Capturas por ticker (horário `America/Sao_Paulo`) |
+| Ação | brapi `type=stock`, finais 3/4/5/6 e units (11 com `subType=unit`, ex.: BPAC11, SANB11) |
+| BDR | **somente** `bdr_allowlist` do `config.json` |
+| ETF | brapi `subType=etf` com giro informado ≥ `fund_prefilter_turnover_brl` + `etf_static` |
+| FII | carteira do dia do **IFIX** (API pública B3 `indexProxy/GetPortfolioDay`) |
 
-Pastas de preview com mais de **7 dias** são apagadas para o artefato do Pages ficar pequeno. Só o `index.html` mais recente é publicado (sem histórico de HTML carimbado).
+Carteiras de Ibovespa, IFIX e Small Caps (SMLL) vêm da mesma API pública da B3, com cache em `data/index_constituents.json` (data da carteira incluída). Metadados (nome, setor, subsetor, logo) da brapi, cache em `data/ticker_meta.json`.
 
-## Agenda
+## Filtros e sinais
 
-Workflow [`.github/workflows/scan.yml`](.github/workflows/scan.yml):
+Filtros: tipo de ativo, setor/subsetor, liquidez média 21d (R$, padrão 5 mi), preço mínimo (padrão R$ 1), variação no dia (faixa %), lista de exclusão, posição vs SMA200, índice (Ibovespa / IFIX / Small Caps).
 
-- Cron a cada 30 minutos, **segunda a sexta**, cobrindo ~**10:30–17:00** em `America/Sao_Paulo` (BRT = UTC−3; o Brasil não usa horário de verão).
-- Também dispara em **Actions → Scan and deploy Pages → Run workflow**.
-- Pula fins de semana, feriados B3 de 2026 e a manhã da Quarta-feira de Cinzas (pregão só às 13h). Lista em `b3_calendar.py` (fonte: [calendário B3 2026](https://www.b3.com.br/pt_br/noticias/calendario-de-negociacao-da-b3-confira-o-funcionamento-da-bolsa-em-2026.htm)). **TODO:** incluir 2027 quando a B3 publicar o ofício.
+Sinais (combinados com E/OU):
+1. **Máx. 52s**: preço > máxima dos 252 pregões anteriores, excluindo a barra de hoje.
+2. **Mín. 52s**: preço < mínima dos 252 pregões anteriores, ex-hoje.
+3. **Cruzamento SMA 50/200**: golden (SMA50 cruza acima da SMA200 hoje vs ontem) / death / ambos.
+4. **Volume anormal**: volume de hoje / média dos 21 pregões anteriores ≥ N× (padrão 2×).
+5. **RSI(14) Wilder**: < 30 ou > 70 (configurável), opção "entrou na faixa hoje".
+6. **Força relativa 21d**: retorno 21d do ativo − retorno 21d do índice > X pp. Ações, units, BDRs e ETFs vs Ibovespa (`^BVSP`); FIIs vs IFIX usando o ETF **XFIX11** como proxy (o Yahoo não tem série diária do IFIX). Se o proxy falhar, FIIs caem para o Ibovespa.
+7. **Gap de abertura**: (abertura hoje − fech. ontem)/fech. ontem, |gap| ≥ X% (padrão 2%), alta/baixa/ambos.
+8. **Rompimento de faixa N dias**: fech. > máx. dos N fechamentos anteriores (N = 20/60), opção de perda da mínima.
+9. **Sequência**: N fechamentos seguidos em alta (ou baixa) vs o anterior (padrão 3).
 
-Se o scanner falhar (por exemplo yfinance vazio), o job **não** envia artefato novo: o site anterior permanece no ar.
+## Ressalvas
 
-## Ligar o GitHub Pages (depois do merge)
-
-O repositório precisa publicar **a partir de Actions**, não da pasta `/docs` de um branch.
-
-1. **Settings → Pages → Build and deployment → Source:** `GitHub Actions`.
-2. Faça o merge deste PR em `main` (ou já esteja em `main`).
-3. **Actions → Scan and deploy Pages → Run workflow** (marque *force* se estiver fora do pregão/feriado e quiser um smoke test).
-4. Se o ambiente `github-pages` pedir aprovação (**Settings → Environments**), aprove o primeiro deploy.
-5. Abra https://celowiz.github.io/monitor-b3/ (pode levar um ou dois minutos).
-
-Sem o passo 1 o workflow sobe o artefato mas o Pages não serve o site.
-
-## yfinance em runners da nuvem
-
-Yahoo Finance **pode bloquear** IPs de GitHub-hosted runners (HTTP 403/429 / respostas vazias). O workflow:
-
-- registra o erro com clareza e **falha o job**;
-- **não** publica um site vazio por cima de uma rodada boa.
-
-Mitigação sem custo: **Run workflow** de novo mais tarde, ou rode localmente (`python screener.py`) para validar dados. `curl_cffi` já está no `requirements.txt` (yfinance 1.7).
-
-Cache do Actions guarda `.cache/` (`state.json`, `daily_cache.json`, `ticker_meta.json`) e `site/previews/`. Se o cache expirar, o scanner tenta reaproveitar `last_run.json` do site publicado para a coluna “desde última rodada”.
+- Preços yfinance diários com `auto_adjust=True` em tudo (máximas históricas ajustadas por proventos).
+- Durante o pregão a barra de hoje é **provisória** (atraso do Yahoo + até ~30 min do Actions).
+- Liquidez = média de close × volume (aproxima o giro).
+- Universo muda com o tempo (viés de sobrevivência); não é backtest.
+- brapi free tier e Yahoo podem limitar/falhar: o JSON lista `failedTickers` e o cabeçalho mostra "parcial".
 
 ## Rodar localmente
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
 pip install -r requirements.txt
-python -m playwright install chromium
-python screener.py --site-dir site --cache-dir .cache
+python scripts/build_data.py --out web/public/data   # --limit 40 para universo reduzido
+cd web && npm ci && npm run dev
 ```
 
-`--skip-png` gera o HTML/JSON sem Chromium. Saída em `site/` (gitignorada).
-
-Testes sem rede:
-
-```bash
-python3 -m unittest discover -s tests -v
-```
-
-## Aviso
-
-Projeto pessoal / educacional. Dados podem estar atrasados, incompletos ou errados. Não use isto como sinal de compra ou venda.
+O `screener.py` legado (rompimento de 52s com PNGs) continua no repo para o monitor local, mas não é mais publicado no Pages.
