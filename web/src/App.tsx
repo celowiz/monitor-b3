@@ -88,6 +88,7 @@ export default function App() {
   const copyLink = async () => {
     const url = `${window.location.origin}${window.location.pathname}#t=${await encodeScreen(screen)}`;
     history.replaceState(null, "", url);
+    track("share_link_copy", { preset: screen.name ?? presetIdx });
     try { await navigator.clipboard.writeText(url); flash("Link copiado. Quem abrir verá esta mesma tela."); }
     catch { window.prompt("Copie o link:", url); }
   };
@@ -228,7 +229,7 @@ export default function App() {
       </div>
 
       {gallery && <Gallery liqMin={latest?.defaults?.liq21MinBrl ?? 5_000_000} onClose={() => setGallery(false)}
-        onPick={(s) => { setScreen(s); setPresetIdx("gallery"); setGallery(false); flash(`Tela "${s.name}" aplicada`); history.replaceState(null, "", window.location.pathname); }} />}
+        onPick={(s) => { track("preset_select", { preset: s.name, source: "gallery" }); setScreen(s); setPresetIdx("gallery"); setGallery(false); flash(`Tela "${s.name}" aplicada`); history.replaceState(null, "", window.location.pathname); }} />}
       {toast && <div className="toast" role="status">{toast}</div>}
 
       <footer className="foot">

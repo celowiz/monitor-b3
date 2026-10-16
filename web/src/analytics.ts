@@ -8,8 +8,12 @@ const SCRIPT_ID = "ga-gtag";
 type W = Window & { dataLayer?: unknown[]; gtag?: (...a: unknown[]) => void };
 const w = (): W | undefined => (typeof window !== "undefined" ? (window as W) : undefined);
 
+// Guardado na sessão: o app reescreve a URL (link compartilhável/galeria) e removeria ?ga_debug.
 const isDebug = () => {
-  try { return new URLSearchParams(w()?.location.search ?? "").has("ga_debug"); } catch { return false; }
+  try {
+    if (new URLSearchParams(w()?.location.search ?? "").has("ga_debug")) { sessionStorage.setItem("ga_debug", "1"); return true; }
+    return sessionStorage.getItem("ga_debug") === "1";
+  } catch { return false; }
 };
 
 function ensureStub(win: W) {
