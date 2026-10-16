@@ -33,6 +33,10 @@ function injectScript(win: W) {
   d.head.appendChild(s);
 }
 
+export const CONTENT_GROUP = "monitor_b3";
+export const configParams = (): Record<string, unknown> =>
+  isDebug() ? { content_group: CONTENT_GROUP, debug_mode: true } : { content_group: CONTENT_GROUP };
+
 let started = false;
 export function initAnalytics() {
   const win = w();
@@ -40,7 +44,7 @@ export function initAnalytics() {
   started = true;
   ensureStub(win);
   win.gtag!("js", new Date());
-  win.gtag!("config", GA_MEASUREMENT_ID, isDebug() ? { debug_mode: true } : {});
+  win.gtag!("config", GA_MEASUREMENT_ID, configParams());
   const start = () => injectScript(win);
   const afterLoad = () => {
     const ric = (win as any).requestIdleCallback;
@@ -58,4 +62,9 @@ export function track(name: string, params: Record<string, string | number | boo
   for (const [k, v] of Object.entries(params)) if (v !== undefined) payload[k] = v;
   if (isDebug()) payload.debug_mode = true;
   win.gtag!("event", name, payload);
+}
+
+/** Clique em link de saída (portfólio, código). */
+export function trackOutbound(link_type: string, link_url: string, link_text: string) {
+  track("outbound_click", { link_type, link_url, link_text });
 }
