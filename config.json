@@ -24,7 +24,37 @@
     "period": "13mo",
     "auto_adjust": true,
     "chunk_size": 40,
-    "threads": true
+    "threads": true,
+    "period_panel": "2y"
   },
-  "ticker_endings": ["3", "4", "5", "6", "11"]
+  "ticker_endings": [
+    "3",
+    "4",
+    "5",
+    "6",
+    "11"
+  ],
+  "etf_static": [
+    "BOVA11",
+    "IVVB11",
+    "SMAL11",
+    "HASH11",
+    "BOVV11",
+    "DIVO11",
+    "SPXI11",
+    "NASD11",
+    "GOLD11",
+    "XFIX11",
+    "ECOO11",
+    "FIND11",
+    "BRAX11",
+    "PIBB11",
+    "QBTC11",
+    "ETHE11",
+    "B5P211",
+    "IMAB11"
+  ],
+  "ifix_proxy": "XFIX11.SA",
+  "fund_prefilter_turnover_brl": 1000000,
+  "universe_notes_panel": "Painel: Ações = brapi type=stock (sufixo 3/4/5/6 e units 11 subType=unit). BDRs = só bdr_allowlist. ETFs = brapi subType=etf (giro brapi >= fund_prefilter_turnover_brl) + etf_static. FIIs = carteira do IFIX (B3). RS: FIIs vs IFIX (proxy XFIX11), demais vs ^BVSP."
 }
