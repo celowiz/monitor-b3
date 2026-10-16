@@ -146,4 +146,17 @@ tbody tr,.card{animation:rowin .32s ease both}
 .side.maxed .chart-panel{height:100%;display:flex;flex-direction:column;box-sizing:border-box}.side.maxed .chart-box{flex:1;height:auto;min-height:300px}
 .cp-max{display:inline-flex;align-items:center;justify-content:center}
 @keyframes cpgrow{from{opacity:.4;transform:scale(.6) translate(30%,30%)}to{opacity:1;transform:none}}
+.presets .sp{flex:1}.btn.sm{padding:4px 10px;font-size:12px}.res-head .csv{margin-left:auto}.btn:disabled{opacity:.4;cursor:default}
+.modal-bg{position:fixed;inset:0;z-index:80;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:24px;animation:fadein .18s}
+.modal{background:var(--bg2);border:1px solid var(--line2);border-radius:10px;width:min(1080px,100%);max-height:100%;overflow:auto;padding:18px 20px}
+.modal-h{display:flex;gap:12px;align-items:flex-start;margin-bottom:14px}.modal-h>div{flex:1}.modal-h h2{margin:0 0 4px;font-size:17px}.modal-h .mu{font-size:12px}
+.gal-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px}
+.gal-card{border:1px solid var(--line);border-radius:8px;background:var(--bg);padding:14px;display:flex;flex-direction:column;gap:10px}.gal-card:hover{border-color:var(--line2)}
+.gal-card h3{margin:0;font-size:14px;font-weight:600}.gal-card p{margin:0;font-size:12px;line-height:1.5;color:var(--mu);flex:1}.gal-card .btn{align-self:flex-start}
+.gal-mini{width:100%;height:auto;max-height:110px;background:var(--bg2);border:1px solid var(--line);border-radius:6px;padding:6px;box-sizing:border-box}
+.gal-mini rect{fill:var(--bg3);stroke:var(--line2)}.gal-mini .sg rect{stroke:var(--teal)}.gal-mini rect.res{fill:var(--tealD);stroke:var(--teal)}
+.gal-mini text{fill:var(--tx);font-size:8px;text-anchor:middle;font-family:JetBrains Mono,monospace}.gal-mini text.res{fill:var(--teal)}
+.gal-mini line,.gal-mini path{stroke:#3a4046;fill:none;stroke-width:1}
+.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:90;background:var(--bg3);border:1px solid var(--teal);color:var(--tx);padding:9px 16px;border-radius:8px;font-size:13px;box-shadow:0 6px 24px rgba(0,0,0,.5);animation:fadein .2s}
+@keyframes fadein{from{opacity:0}to{opacity:1}}
 @media (prefers-reduced-motion: reduce){*,*::before,*::after{animation:none!important;transition:none!important}.fe-dot{display:none}}

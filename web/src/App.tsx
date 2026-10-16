@@ -1,6 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Canvas, { Palette, insertBlock, totalSteps } from "./Canvas";
 import Results from "./Results";
+import Gallery from "./Gallery";
+import { decodeScreen, encodeScreen, tokenFromHash } from "./share";
 import ChartPanel from "./Chart";
 import { BlockEditor } from "./Editors";
 import { track } from "./analytics";
@@ -66,11 +68,34 @@ export default function App() {
   const [screen, setScreen] = useState<Screen>(() => defaultScreen());
   const [presetIdx, setPresetIdx] = useState("builtin");
   const [sel, setSel] = useState<string | null>(null);
+  const [gallery, setGallery] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+  const fromLink = useRef(false);
+  const flash = (m: string) => { setToast(m); window.clearTimeout((flash as any).t); (flash as any).t = window.setTimeout(() => setToast(null), 2600); };
+  useEffect(() => {
+    const load = () => {
+      const tok = tokenFromHash(window.location.hash);
+      if (!tok) return;
+      fromLink.current = true;
+      decodeScreen(tok).then((s) => {
+        if (s) { setScreen(s); setPresetIdx("link"); flash(`Tela "${s.name}" carregada do link`); }
+        else { fromLink.current = false; flash("Link inválido ou de versão antiga. Mostrando a tela padrão."); history.replaceState(null, "", window.location.pathname + window.location.search); }
+      });
+    };
+    load(); window.addEventListener("hashchange", load);
+    return () => window.removeEventListener("hashchange", load);
+  }, []);
+  const copyLink = async () => {
+    const url = `${window.location.origin}${window.location.pathname}#t=${await encodeScreen(screen)}`;
+    history.replaceState(null, "", url);
+    try { await navigator.clipboard.writeText(url); flash("Link copiado. Quem abrir verá esta mesma tela."); }
+    catch { window.prompt("Copie o link:", url); }
+  };
 
   useEffect(() => {
     fetch(`${import.meta.env.BASE_URL}data/latest.json`, { cache: "no-cache" })
       .then((r) => { if (!r.ok) throw new Error(String(r.status)); return r.json(); })
-      .then((d: Latest) => { setLatest(d); setScreen(defaultScreen(d.defaults?.liq21MinBrl)); })
+      .then((d: Latest) => { setLatest(d); if (!fromLink.current) setScreen(defaultScreen(d.defaults?.liq21MinBrl)); })
       .catch((e) => setError(`Não foi possível carregar os dados (${e.message}).`));
   }, []);
 
@@ -172,11 +197,16 @@ export default function App() {
       <div className="presets">
         <select value={presetIdx} onChange={(e) => choose(e.target.value)}>
           <option value="builtin">Máx. 52s + liq. R$ 5 mi</option>
+          {presetIdx === "gallery" && <option value="gallery">{screen.name}</option>}
+          {presetIdx === "link" && <option value="link">{screen.name} (link)</option>}
           {saved.map((s, i) => <option key={i} value={String(i)}>{s.name}</option>)}
         </select>
         <button className="btn pri" onClick={save}>Salvar tela</button>
         {presetIdx !== "builtin" && <button className="btn" onClick={del}>Excluir</button>}
-        <button className="btn" onClick={() => choose(presetIdx)}>Restaurar</button>
+        <button className="btn" onClick={() => choose(presetIdx === "gallery" || presetIdx === "link" ? "builtin" : presetIdx)}>Restaurar</button>
+        <span className="sp" />
+        <button className="btn" onClick={() => setGallery(true)}>▦ Galeria de telas</button>
+        <button className="btn" onClick={copyLink}>⧉ Copiar link</button>
       </div>
 
       {wide ? (
@@ -196,6 +226,10 @@ export default function App() {
         <Results runId={exec.runId} done={done} ev={ev} total={latest?.universeCount ?? 0} failed={latest?.failedTickers ?? []} selected={sel} onSelect={(t: string) => { if (t !== sel) { const r = rows.find((x) => x.t === t); track("ticker_open", { ticker: t, asset_type: r?.kind, sector: r?.sector ?? undefined }); } setSel(t); }} compact={!wide} />
         {selRow && <div className={wide ? "side" + (chartMax ? " maxed" : "") : "fullscreen"}><ChartPanel row={selRow} hits={ev.hits.get(selRow.t) ?? []} onClose={() => setSel(null)} maximized={chartMax} onToggleMax={wide ? () => { if (!chartMax) track("chart_maximize", { ticker: selRow.t }); setChartMax((m) => !m); } : undefined} /></div>}
       </div>
+
+      {gallery && <Gallery liqMin={latest?.defaults?.liq21MinBrl ?? 5_000_000} onClose={() => setGallery(false)}
+        onPick={(s) => { setScreen(s); setPresetIdx("gallery"); setGallery(false); flash(`Tela "${s.name}" aplicada`); history.replaceState(null, "", window.location.pathname); }} />}
+      {toast && <div className="toast" role="status">{toast}</div>}
 
       <footer className="foot">
         <b>Conteúdo educativo, não é recomendação de investimento.</b>
