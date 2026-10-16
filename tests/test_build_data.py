@@ -23,6 +23,21 @@ class IndicatorTests(unittest.TestCase):
         ind = bd.indicators(self.frame([10 + (i % 5) for i in range(300)]), 0.0)
         self.assertTrue(0 <= ind["rsi"] <= 100)
 
+    def test_candles_payload_series(self):
+        closes = [10 + (i % 7) for i in range(300)]
+        df = self.frame(closes)
+        df.loc[df.index[-1], "Volume"] = 3000.0
+        bench = pd.Series([100.0] * 300, index=df.index)
+        p = bd.candles_payload(df, bench)
+        n = len(p["t"])
+        for k in ("rsi", "volr", "rs21", "low52", "high52"):
+            self.assertEqual(len(p[k]), n, k)
+        self.assertAlmostEqual(p["volr"][-1], 3.0)
+        exp = (closes[-1] / closes[-22] - 1) * 100
+        self.assertAlmostEqual(p["rs21"][-1], round(exp, 3), places=3)
+        self.assertTrue(all(x is None or 0 <= x <= 100 for x in p["rsi"]))
+        self.assertIsNone(bd.candles_payload(df)["rs21"][-1])
+
     def test_kind(self):
         self.assertEqual(bd.asset_kind("BPAC11", {"subType": "unit"}), "acao")
         self.assertEqual(bd.asset_kind("BOVA11", {"subType": "etf"}), "etf")

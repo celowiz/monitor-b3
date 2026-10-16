@@ -280,10 +280,23 @@ def indicators(df: pd.DataFrame, bench_ret21: float | None) -> dict:
     return out
 
 
-def candles_payload(df: pd.DataFrame) -> dict:
+def candles_payload(df: pd.DataFrame, bench_close: pd.Series | None = None) -> dict:
+    """~1 ano de candles + séries para o gráfico: SMAs, máx./mín. 52s ex-hoje, RSI(14),
+    volume relativo (vol / média dos 21 pregões anteriores) e RS 21d em pp vs benchmark."""
     c = df["Close"]
     s50, s200 = c.rolling(50).mean(), c.rolling(200).mean()
     hi52 = df["High"].shift(1).rolling(LOOKBACK, min_periods=LOOKBACK - 5).max()
+    lo52 = df["Low"].shift(1).rolling(LOOKBACK, min_periods=LOOKBACK - 5).min()
+    rsi = rsi_wilder(c)
+    v = df["Volume"].fillna(0)
+    avg21 = v.shift(1).rolling(21).mean()
+    volr = (v / avg21.where(avg21 > 0))
+    ret21 = c / c.shift(21) - 1
+    if bench_close is not None:
+        b = bench_close.reindex(c.index).ffill()
+        rs = (ret21 - (b / b.shift(21) - 1)) * 100
+    else:
+        rs = pd.Series(float("nan"), index=c.index)
     t = df.tail(CHART_BARS)
     idx = t.index
     return {
@@ -296,6 +309,10 @@ def candles_payload(df: pd.DataFrame) -> dict:
         "sma50": [r(x, 3) for x in s50.loc[idx]],
         "sma200": [r(x, 3) for x in s200.loc[idx]],
         "high52": [r(x, 3) for x in hi52.loc[idx]],
+        "low52": [r(x, 3) for x in lo52.loc[idx]],
+        "rsi": [r(x, 2) for x in rsi.loc[idx]],
+        "volr": [r(x, 3) for x in volr.loc[idx]],
+        "rs21": [r(x, 3) for x in rs.loc[idx]],
     }
 
 
@@ -317,6 +334,10 @@ def main() -> int:
     ifix_proxy = cfg.get("ifix_proxy", "XFIX11.SA")
     syms = [f"{t}.SA" for t in tickers] + ["^BVSP", ifix_proxy]
     frames, failed = download(syms, yc.get("period_panel", "2y"), int(yc.get("chunk_size", 40)))
+
+    def chg_of(sym):
+        b = frames.get(sym)
+        return float(b["Close"].iloc[-1] / b["Close"].iloc[-2] - 1) if b is not None and len(b) > 1 else None
 
     def ret21_of(sym):
         b = frames.get(sym)
@@ -344,7 +365,7 @@ def main() -> int:
         rows.append({"t": t, "name": m.get("name") or t, "kind": kind,
                      "sector": m.get("sector"), "subsector": m.get("subsector"),
                      "logo": m.get("logoUrl"), "idx": [ix for ix in INDEXES if t in membership[ix]], **ind})
-        (out / "candles" / f"{t}.json").write_text(json.dumps(candles_payload(df), separators=(",", ":")))
+        (out / "candles" / f"{t}.json").write_text(json.dumps(candles_payload(df, (frames.get(ifix_proxy) if use_ifix else bench)["Close"] if (frames.get(ifix_proxy) if use_ifix else bench) is not None else None), separators=(",", ":")))
 
     last_dates = sorted({x["date"] for x in rows})
     payload = {
@@ -358,7 +379,8 @@ def main() -> int:
         "defaults": {"liq21MinBrl": cfg.get("filters", {}).get("liq21_min_brl", 5_000_000)},
         "bdrAllowlist": cfg.get("bdr_allowlist", []),
         "benchmark": {"ret21": r(bench_ret21, 5), "price": r(bench["Close"].iloc[-1], 2) if bench is not None else None,
-                      "ifixProxy": ifix_proxy.replace(".SA", ""), "ifixRet21": r(ifix_ret21, 5)},
+                      "ifixProxy": ifix_proxy.replace(".SA", ""), "ifixRet21": r(ifix_ret21, 5),
+                      "chg": r(chg_of("^BVSP"), 5), "ifixChg": r(chg_of(ifix_proxy), 5)},
         "universeCount": len(tickers),
         "indexes": {ix: {"date": (_INDEX_CACHE.get(ix) or {}).get("date"), "count": len(membership[ix])} for ix in INDEXES},
         "failedTickers": sorted(set(failed_t)),

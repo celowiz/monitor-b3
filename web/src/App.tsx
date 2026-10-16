@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Canvas, { Palette, insertBlock, totalSteps } from "./Canvas";
 import Results from "./Results";
 import Gallery from "./Gallery";
+import Market from "./Market";
 import { decodeScreen, encodeScreen, tokenFromHash } from "./share";
 import ChartPanel from "./Chart";
 import { BlockEditor } from "./Editors";
@@ -149,6 +150,8 @@ export default function App() {
     on(); window.addEventListener("scroll", on, { passive: true });
     return () => window.removeEventListener("scroll", on);
   }, []);
+  const sigParams = useMemo(() => Object.fromEntries(screen.blocks.filter((b) => !isFilter(b.type)).map((b) => [b.type, b.params])), [screen]);
+  const [view, setView] = useState<"telas" | "mercado">(() => (window.location.hash.includes("mercado") ? "mercado" : "telas"));
   const [chartMax, setChartMax] = useState(false);
   useEffect(() => { if (!sel) setChartMax(false); }, [sel]);
   useEffect(() => {
@@ -161,7 +164,11 @@ export default function App() {
   return (
     <div className={"app" + (wide ? "" : " mobile")}>
       <header className="top">
-        <div className="brand"><a href="https://celowiz.github.io/">celowiz</a> / <b>Monitor B3</b> <span className="mu sub">construtor de telas</span></div>
+        <div className="brand"><a href="https://celowiz.github.io/">celowiz</a> / <b>Monitor B3</b> <span className="mu sub">construtor de telas</span>
+          <nav className="tabs" role="tablist">
+            <button role="tab" aria-selected={view === "telas"} className={view === "telas" ? "on" : ""} onClick={() => setView("telas")}>Telas</button>
+            <button role="tab" aria-selected={view === "mercado"} className={view === "mercado" ? "on" : ""} onClick={() => setView("mercado")}>Mercado</button>
+          </nav></div>
         {latest && (
           <div className="meta mono">
             <span><i className="dot" />Rodada <b>{fmtRun(latest.generatedAt)}</b></span>
@@ -176,6 +183,7 @@ export default function App() {
 
       {error && <div className="empty">{error}</div>}
 
+      {view === "mercado" ? (latest && <Market latest={latest} wide={wide} />) : (<>
       <div className="presets">
         <select value={presetIdx} onChange={(e) => choose(e.target.value)}>
           <option value="builtin">Máx. 52s + liq. R$ 5 mi</option>
@@ -206,9 +214,10 @@ export default function App() {
 
       <div id="resultados" className={"lower" + (selRow && wide ? " with-chart" : "")}>
         <Results runId={exec.runId} done={done} ev={ev} total={latest?.universeCount ?? 0} failed={latest?.failedTickers ?? []} selected={sel} onSelect={setSel} compact={!wide} />
-        {selRow && <div className={wide ? "side" + (chartMax ? " maxed" : "") : "fullscreen"}><ChartPanel row={selRow} hits={ev.hits.get(selRow.t) ?? []} onClose={() => setSel(null)} maximized={chartMax} onToggleMax={wide ? () => setChartMax((m) => !m) : undefined} /></div>}
+        {selRow && <div className={wide ? "side" + (chartMax ? " maxed" : "") : "fullscreen"}><ChartPanel row={selRow} hits={ev.hits.get(selRow.t) ?? []} onClose={() => setSel(null)} signalParams={sigParams} maximized={chartMax} onToggleMax={wide ? () => setChartMax((m) => !m) : undefined} /></div>}
       </div>
 
+      </>)}
       {gallery && <Gallery liqMin={latest?.defaults?.liq21MinBrl ?? 5_000_000} onClose={() => setGallery(false)}
         onPick={(s) => { setScreen(s); setPresetIdx("gallery"); setGallery(false); flash(`Tela "${s.name}" aplicada`); history.replaceState(null, "", window.location.pathname); }} />}
       {toast && <div className="toast" role="status">{toast}</div>}
