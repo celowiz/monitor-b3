@@ -5,6 +5,8 @@ name: Scan and deploy Pages
 
 on:
   pull_request:
+  push:
+    branches: [main]
   schedule:
     # B3 session ~10:30–17:00 America/Sao_Paulo (UTC-3, no DST) on weekdays.
     - cron: "30 13 * * 1-5" # 10:30 BRT
