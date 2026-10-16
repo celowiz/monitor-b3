@@ -2,8 +2,9 @@
 """Gera os dados do painel de blocos do Monitor B3.
 
 Saída (em --out, normalmente site/data):
-  latest.json            universo + indicadores por ticker (filtragem roda no browser)
-  candles/<TICKER>.json  ~1 ano de candles diários + SMA50/SMA200 (carregado sob demanda)
+  latest_br.json / latest_us.json  universo + indicadores + histórico de sinais (--market br|us)
+  latest.json            cópia de latest_br.json (compatibilidade)
+  candles/<T>.json, candles_us/<T>.json  ~1 ano de candles + séries do gráfico (sob demanda)
 
 Fontes: brapi.dev (universo + metadados, cache em data/ticker_meta.json) e
 yfinance (OHLCV diário, auto_adjust=True em tudo, incluindo ^BVSP).
@@ -25,6 +26,9 @@ from zoneinfo import ZoneInfo
 import pandas as pd
 import requests
 import yfinance as yf
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import history  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 TZ = ZoneInfo("America/Sao_Paulo")
@@ -77,6 +81,35 @@ def norm_meta(item: dict) -> dict:
 
 INDEX_PATH = ROOT / "data" / "index_constituents.json"
 INDEXES = ("IBOV", "IFIX", "SMLL")
+SP500_PATH = ROOT / "data" / "sp500.json"
+SP500_URL = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
+
+
+def sp500_constituents() -> list[dict]:
+    """Constituintes do S&P 500 (Wikipedia, tabela pública) com setor GICS. Cache com data em
+    data/sp500.json; reaproveita o cache por 7 dias e também se a página falhar."""
+    import io
+    cache = json.loads(SP500_PATH.read_text()) if SP500_PATH.exists() else {}
+    try:
+        age = (datetime.now(TZ) - datetime.fromisoformat(cache["updated_at"])).days if cache.get("updated_at") else 99
+    except Exception:
+        age = 99
+    if age < 7 and cache.get("tickers"):
+        return cache["tickers"]
+    try:
+        r = requests.get(SP500_URL, headers={"User-Agent": "monitor-b3/1.0 (github.com/celowiz/monitor-b3)"}, timeout=30)
+        r.raise_for_status()
+        t = pd.read_html(io.StringIO(r.text), attrs={"id": "constituents"})[0]
+        rows = [{"t": str(x["Symbol"]).strip().replace(".", "-"), "name": str(x["Security"]),
+                 "sector": str(x["GICS Sector"]), "subsector": str(x["GICS Sub-Industry"])} for x in t.to_dict("records")]
+        if len(rows) < 400:
+            raise ValueError(f"lista curta ({len(rows)})")
+        SP500_PATH.write_text(json.dumps({"updated_at": datetime.now(TZ).isoformat(timespec="seconds"), "source": SP500_URL,
+                                          "tickers": rows}, ensure_ascii=False, indent=0))
+        return rows
+    except Exception as e:
+        log.warning("lista S&P 500 falhou (%s) — usando cache", e)
+        return cache.get("tickers", [])
 _INDEX_CACHE: dict[str, dict] = {}
 
 
@@ -313,6 +346,7 @@ def candles_payload(df: pd.DataFrame, bench_close: pd.Series | None = None) -> d
         "rsi": [r(x, 2) for x in rsi.loc[idx]],
         "volr": [r(x, 3) for x in volr.loc[idx]],
         "rs21": [r(x, 3) for x in rs.loc[idx]],
+        "bc": [r(x, 3) for x in (bench_close.reindex(c.index).ffill().loc[idx] if bench_close is not None else [None] * len(idx))],
     }
 
 
@@ -320,74 +354,114 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default="site/data")
     ap.add_argument("--config", default=str(ROOT / "config.json"))
+    ap.add_argument("--market", choices=("br", "us"), default="br")
     ap.add_argument("--limit", type=int, default=None, help="universo reduzido (teste local)")
     args = ap.parse_args()
     cfg = json.loads(Path(args.config).read_text())
+    us = args.market == "us"
     out = Path(args.out)
-    (out / "candles").mkdir(parents=True, exist_ok=True)
+    cdir = out / ("candles_us" if us else "candles")
+    cdir.mkdir(parents=True, exist_ok=True)
     run_at = datetime.now(TZ)
-
-    tickers, store = build_universe(cfg, args.limit)
-    membership = {ix: set(index_constituents(ix)) for ix in INDEXES}
-    log.info("universo: %d tickers", len(tickers))
     yc = cfg.get("yfinance", {})
-    ifix_proxy = cfg.get("ifix_proxy", "XFIX11.SA")
-    syms = [f"{t}.SA" for t in tickers] + ["^BVSP", ifix_proxy]
+    ucfg = cfg.get("us", {})
+
+    if us:
+        cons = sp500_constituents()
+        if args.limit:
+            cons = cons[:: max(1, len(cons) // args.limit)][: args.limit]
+        store = {x["t"]: {"name": x["name"], "sector": x["sector"], "subsector": x["subsector"]} for x in cons}
+        tickers = sorted(store)
+        membership = {"SP500": set(tickers)}
+        bench_sym, ifix_proxy = "^GSPC", None
+        syms = tickers + [bench_sym]
+        ysym = lambda t: t  # noqa: E731
+    else:
+        tickers, store = build_universe(cfg, args.limit)
+        membership = {ix: set(index_constituents(ix)) for ix in INDEXES}
+        bench_sym = "^BVSP"
+        ifix_proxy = cfg.get("ifix_proxy", "XFIX11.SA")
+        syms = [f"{t}.SA" for t in tickers] + [bench_sym, ifix_proxy]
+        ysym = lambda t: f"{t}.SA"  # noqa: E731
+    log.info("[%s] universo: %d tickers", args.market, len(tickers))
     frames, failed = download(syms, yc.get("period_panel", "2y"), int(yc.get("chunk_size", 40)))
 
+    def ret21_of(sym):
+        b = frames.get(sym) if sym else None
+        return float(b["Close"].iloc[-1] / b["Close"].iloc[-22] - 1) if b is not None and len(b) > 22 else None
+
     def chg_of(sym):
-        b = frames.get(sym)
+        b = frames.get(sym) if sym else None
         return float(b["Close"].iloc[-1] / b["Close"].iloc[-2] - 1) if b is not None and len(b) > 1 else None
 
-    def ret21_of(sym):
-        b = frames.get(sym)
-        return float(b["Close"].iloc[-1] / b["Close"].iloc[-22] - 1) if b is not None and len(b) > 22 else None
-    bench = frames.get("^BVSP")
-    bench_ret21 = ret21_of("^BVSP")
+    bench = frames.get(bench_sym)
+    ifix = frames.get(ifix_proxy) if ifix_proxy else None
+    bench_ret21 = ret21_of(bench_sym)
     ifix_ret21 = ret21_of(ifix_proxy)
     rows = []
-    failed_t = sorted(s.replace(".SA", "") for s in failed if s not in ("^BVSP", ifix_proxy))
+    hist_frames: dict[str, pd.DataFrame] = {}
+    hist_bench: dict[str, pd.Series | None] = {}
+    failed_t = sorted(s_.replace(".SA", "") for s_ in failed if s_ not in (bench_sym, ifix_proxy))
     for t in tickers:
-        df = frames.get(f"{t}.SA")
+        df = frames.get(ysym(t))
         if df is None:
             continue
         try:
-            kind = asset_kind(t, store.get(t, {}))
-            # FIIs vs IFIX (proxy XFIX11; se indisponível, cai para ^BVSP); demais vs Ibovespa
+            kind = "acao" if us else asset_kind(t, store.get(t, {}))
+            # FIIs vs IFIX (proxy XFIX11; se indisponível, cai para ^BVSP); demais vs Ibovespa / S&P 500
             use_ifix = kind == "fii" and ifix_ret21 is not None
             ind = indicators(df, ifix_ret21 if use_ifix else bench_ret21)
-            ind["rsBench"] = "IFIX" if use_ifix else "IBOV"
+            ind["rsBench"] = "IFIX" if use_ifix else ("SPX" if us else "IBOV")
         except Exception as e:
             log.warning("indicadores %s: %s", t, e)
             failed_t.append(t)
             continue
         m = store.get(t, {})
+        bc = ifix if use_ifix else bench
         rows.append({"t": t, "name": m.get("name") or t, "kind": kind,
                      "sector": m.get("sector"), "subsector": m.get("subsector"),
-                     "logo": m.get("logoUrl"), "idx": [ix for ix in INDEXES if t in membership[ix]], **ind})
-        (out / "candles" / f"{t}.json").write_text(json.dumps(candles_payload(df, (frames.get(ifix_proxy) if use_ifix else bench)["Close"] if (frames.get(ifix_proxy) if use_ifix else bench) is not None else None), separators=(",", ":")))
+                     "logo": m.get("logoUrl"), "idx": [ix for ix in membership if t in membership[ix]], **ind})
+        (cdir / f"{t}.json").write_text(json.dumps(candles_payload(df, bc["Close"] if bc is not None else None), separators=(",", ":")))
+        hist_frames[t] = df
+        hist_bench[t] = bc["Close"] if bc is not None else None
+
+    t0 = time.time()
+    hist = history.summarize(history.collect(hist_frames, bench["Close"] if bench is not None else None, hist_bench))
+    log.info("histórico de sinais: %.1fs", time.time() - t0)
 
     last_dates = sorted({x["date"] for x in rows})
+    liq_default = float(ucfg.get("liq21_min_usd", 50_000_000)) if us else cfg.get("filters", {}).get("liq21_min_brl", 5_000_000)
     payload = {
-        "schema": 1,
+        "schema": 2,
+        "market": args.market,
+        "currency": "USD" if us else "BRL",
         "generatedAt": run_at.isoformat(timespec="seconds"),
         "dataDate": last_dates[-1] if last_dates else None,
-        "sources": {"universe": "brapi.dev (tier gratuito, cache em data/ticker_meta.json)",
-                    "prices": "yfinance diário, auto_adjust=True", "benchmark": "^BVSP"},
+        "sources": ({"universe": "Wikipedia: List of S&P 500 companies (cache em data/sp500.json)",
+                     "prices": "yfinance diário, auto_adjust=True", "benchmark": "^GSPC"} if us else
+                    {"universe": "brapi.dev (tier gratuito, cache em data/ticker_meta.json)",
+                     "prices": "yfinance diário, auto_adjust=True", "benchmark": "^BVSP"}),
         "delayNote": "até ~30 min (GitHub Actions) + atraso do Yahoo; barra de hoje é provisória durante o pregão",
         "lookback52": LOOKBACK,
-        "defaults": {"liq21MinBrl": cfg.get("filters", {}).get("liq21_min_brl", 5_000_000)},
-        "bdrAllowlist": cfg.get("bdr_allowlist", []),
-        "benchmark": {"ret21": r(bench_ret21, 5), "price": r(bench["Close"].iloc[-1], 2) if bench is not None else None,
-                      "ifixProxy": ifix_proxy.replace(".SA", ""), "ifixRet21": r(ifix_ret21, 5),
-                      "chg": r(chg_of("^BVSP"), 5), "ifixChg": r(chg_of(ifix_proxy), 5)},
+        "defaults": {"liq21MinBrl": liq_default},
+        "bdrAllowlist": [] if us else cfg.get("bdr_allowlist", []),
+        "benchmark": {"name": "S&P 500" if us else "Ibovespa", "symbol": bench_sym,
+                      "ret21": r(bench_ret21, 5), "price": r(bench["Close"].iloc[-1], 2) if bench is not None else None,
+                      "ifixProxy": ifix_proxy.replace(".SA", "") if ifix_proxy else None, "ifixRet21": r(ifix_ret21, 5),
+                      "chg": r(chg_of(bench_sym), 5), "ifixChg": r(chg_of(ifix_proxy), 5)},
         "universeCount": len(tickers),
-        "indexes": {ix: {"date": (_INDEX_CACHE.get(ix) or {}).get("date"), "count": len(membership[ix])} for ix in INDEXES},
+        "indexes": ({"SP500": {"date": (json.loads(SP500_PATH.read_text()).get("updated_at", "")[:10] if SP500_PATH.exists() else None),
+                               "count": len(tickers)}} if us else
+                    {ix: {"date": (_INDEX_CACHE.get(ix) or {}).get("date"), "count": len(membership[ix])} for ix in INDEXES}),
+        "history": {"window": history.WINDOW, "horizons": list(history.HORIZONS), "signals": hist},
         "failedTickers": sorted(set(failed_t)),
         "tickers": rows,
     }
-    (out / "latest.json").write_text(json.dumps(payload, ensure_ascii=False, separators=(",", ":")))
-    log.info("latest.json: %d linhas, %d falhas", len(rows), len(payload["failedTickers"]))
+    body = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+    (out / f"latest_{args.market}.json").write_text(body)
+    if not us:
+        (out / "latest.json").write_text(body)  # compatibilidade com links/caches antigos
+    log.info("[%s] latest: %d linhas, %d falhas", args.market, len(rows), len(payload["failedTickers"]))
     if not rows:
         log.error("nenhum ticker com dados — abortando para não publicar site vazio")
         return 1

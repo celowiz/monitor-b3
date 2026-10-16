@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Kind, KIND_LABEL, Latest, fmtBrl, fmtPct } from "./engine";
+import { Kind, KIND_LABEL, Latest, MKT, fmtBrl, fmtPct } from "./engine";
 import { breadth, sectorTiles, squarify } from "./signals";
 
 // Cor divergente: vermelho (-3%) → cinza (0) → teal (+3%)
@@ -24,7 +24,7 @@ function Bar({ label, v, n, hint }: { label: string; v: number; n: number; hint:
 }
 
 export default function Market({ latest, wide }: { latest: Latest; wide: boolean }) {
-  const all: Kind[] = ["acao", "bdr", "etf", "fii"];
+  const all: Kind[] = (["acao", "bdr", "etf", "fii"] as Kind[]).filter((k) => latest.tickers.some((r) => r.kind === k));
   const [kinds, setKinds] = useState<Kind[]>(["acao"]);
   const rows = useMemo(() => latest.tickers.filter((r) => kinds.includes(r.kind)), [latest, kinds]);
   const b = useMemo(() => breadth(rows), [rows]);
@@ -44,8 +44,8 @@ export default function Market({ latest, wide }: { latest: Latest; wide: boolean
     <section className="market">
       <div className="mk-head">
         <div className="mk-idx">
-          <div><span className="mu">Ibovespa</span><b className={"mono " + cls(bm.chg)}>{fmtPct(bm.chg ?? null)}</b></div>
-          <div><span className="mu">IFIX <small>({bm.ifixProxy ?? "XFIX11"})</small></span><b className={"mono " + cls(bm.ifixChg)}>{fmtPct(bm.ifixChg ?? null)}</b></div>
+          <div><span className="mu">{MKT.market === "us" ? "S&P 500" : "Ibovespa"}</span><b className={"mono " + cls(bm.chg)}>{fmtPct(bm.chg ?? null)}</b></div>
+          {MKT.market === "br" && <div><span className="mu">IFIX <small>({bm.ifixProxy ?? "XFIX11"})</small></span><b className={"mono " + cls(bm.ifixChg)}>{fmtPct(bm.ifixChg ?? null)}</b></div>}
         </div>
         <div className="seg mk-kinds" role="group" aria-label="Tipos de ativo">
           {all.map((k) => <button key={k} className={kinds.includes(k) ? "on" : ""} onClick={() => toggle(k)}>{KIND_LABEL[k]}</button>)}

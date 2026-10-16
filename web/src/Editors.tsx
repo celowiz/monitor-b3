@@ -1,4 +1,4 @@
-import { Block, KIND_LABEL, Kind } from "./engine";
+import { Block, KIND_LABEL, Kind , MKT } from "./engine";
 
 interface Props { block: Block; sectors: string[]; tree?: Record<string, string[]>; onParams: (p: Record<string, any>) => void }
 
@@ -61,7 +61,7 @@ export function BlockEditor({ block, sectors, tree = {}, onParams }: Props) {
         <div className="col nodrag">
           <input className="slider nodrag" type="range" min={0} max={steps.length - 1} value={idx}
             onChange={(e) => onParams({ min: steps[Number(e.target.value)] * 1e6 })} />
-          <Num value={mi} step={0.5} suffix="R$ mi (média 21d)" onChange={(v) => onParams({ min: v * 1e6 })} />
+          <Num value={mi} step={0.5} suffix={`${MKT.cur} mi (média 21d)`} onChange={(v) => onParams({ min: v * 1e6 })} />
         </div>
       );
     }
@@ -79,14 +79,14 @@ export function BlockEditor({ block, sectors, tree = {}, onParams }: Props) {
     case "index":
       return (
         <div className="chips nodrag">
-          {[["IBOV", "Ibovespa"], ["IFIX", "IFIX"], ["SMLL", "Small Caps"]].map(([k, l]) => {
+          {MKT.indexOptions.map(([k, l]) => {
             const on = p.indices.includes(k);
             return <button key={k} className={"chip" + (on ? " on" : "")} onClick={() => onParams({ indices: on ? p.indices.filter((x: string) => x !== k) : [...p.indices, k] })}>{l}</button>;
           })}
         </div>
       );
     case "minPrice":
-      return <Num value={p.min} step={0.5} suffix="R$" onChange={(v) => onParams({ min: v })} />;
+      return <Num value={p.min} step={0.5} suffix={MKT.cur} onChange={(v) => onParams({ min: v })} />;
     case "smaCross":
       return <Seg value={p.dir} options={[["golden", "Golden ↑"], ["death", "Death ↓"], ["any", "Ambos"]]} onChange={(v) => onParams({ dir: v })} />;
     case "volume":

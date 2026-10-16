@@ -1,17 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createChart, createSeriesMarkers, CandlestickSeries, HistogramSeries, LineSeries, LineStyle, type IChartApi, type ISeriesMarkersPluginApi, type SeriesMarker, type Time, type UTCTimestamp } from "lightweight-charts";
-import { Block, BlockType, DEFS, KIND_LABEL, Row, SIGNAL_TYPES, fmtNum, fmtPct } from "./engine";
+import { Block, BlockType, DEFS, KIND_LABEL, MKT, Row, SIGNAL_TYPES, fmtNum, fmtPct } from "./engine";
+import { CAVEATS, StatCell } from "./History";
 import { track } from "./analytics";
-import { type Candles, type SignalEvent, SIGNAL_COLORS, historicalSignals } from "./signals";
+import { type Candles, type SignalEvent, HIST_PARAMS, HORIZONS, SIGNAL_COLORS, fwdStats, historicalSignals } from "./signals";
 
 const DEFAULT_ON: BlockType[] = ["high52", "low52", "smaCross", "rsi", "gap", "volume"];
-const cache = new Map<string, Candles>();
+const cache = new Map<string, Candles & { bc?: (number | null)[] }>();
 const ts = (d: string) => (Date.parse(d + "T00:00:00Z") / 1000) as UTCTimestamp;
 
 export default function ChartPanel({ row, hits, onClose, maximized = false, onToggleMax, signalParams }: { row: Row; hits: Block[]; onClose: () => void; maximized?: boolean; onToggleMax?: () => void; signalParams?: Partial<Record<BlockType, Record<string, any>>> }) {
   const el = useRef<HTMLDivElement>(null);
   const chart = useRef<IChartApi | null>(null);
-  const [data, setData] = useState<Candles | null>(cache.get(row.t) ?? null);
+  const [data, setData] = useState<(Candles & { bc?: (number | null)[] }) | null>(cache.get(MKT.market + row.t) ?? null);
   const [err, setErr] = useState<string | null>(null);
   const [range, setRange] = useState<number>(252);
   const markers = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
@@ -19,14 +20,16 @@ export default function ChartPanel({ row, hits, onClose, maximized = false, onTo
   const [tip, setTip] = useState<{ x: number; y: number; d: string; ev: SignalEvent[]; rsi?: number | null; volr?: number | null } | null>(null);
   const events = useMemo(() => (data ? historicalSignals(data, signalParams) : []), [data, signalParams]);
   const counts = useMemo(() => { const m = new Map<BlockType, number>(); for (const e of events) m.set(e.type, (m.get(e.type) ?? 0) + 1); return m; }, [events]);
+  const tstats = useMemo(() => (data ? fwdStats(data, historicalSignals(data, HIST_PARAMS)) : null), [data]);
+  const [showHist, setShowHist] = useState(false);
   const evRef = useRef(events); evRef.current = events;
 
   useEffect(() => {
     setErr(null);
-    if (cache.has(row.t)) { setData(cache.get(row.t)!); return; }
+    if (cache.has(MKT.market + row.t)) { setData(cache.get(MKT.market + row.t)!); return; }
     setData(null);
-    fetch(`${import.meta.env.BASE_URL}data/candles/${row.t}.json`).then((r) => { if (!r.ok) throw new Error(String(r.status)); return r.json(); })
-      .then((d) => { cache.set(row.t, d); setData(d); }).catch(() => setErr("Sem candles para este ticker nesta rodada."));
+    fetch(`${import.meta.env.BASE_URL}data/${MKT.market === "us" ? "candles_us" : "candles"}/${row.t}.json`).then((r) => { if (!r.ok) throw new Error(String(r.status)); return r.json(); })
+      .then((d) => { cache.set(MKT.market + row.t, d); setData(d); }).catch(() => setErr("Sem candles para este ticker nesta rodada."));
   }, [row.t]);
 
   useEffect(() => {
@@ -114,7 +117,7 @@ export default function ChartPanel({ row, hits, onClose, maximized = false, onTo
         {onToggleMax && <button className="close cp-max" onClick={onToggleMax} aria-label={maximized ? "restaurar" : "tela cheia"} title={maximized ? "Restaurar (Esc)" : "Tela cheia"}>{maximized ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/></svg> : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>}</button>}
         <button className="close" onClick={onClose} aria-label="fechar">×</button>
       </div>
-      <div className="cp-price mono">R$ {fmtNum(row.price)} <span className={up ? "up" : "dn"}>{fmtPct(row.chg)}</span></div>
+      <div className="cp-price mono">{MKT.cur} {fmtNum(row.price)} <span className={up ? "up" : "dn"}>{fmtPct(row.chg)}</span></div>
       <div className="badges">{hits.map((h) => <span key={h.id} className="bdg">{DEFS[h.type].short}</span>)}</div>
       <div className="cp-ctl">
         <div className="seg">{([[63, "3M"], [126, "6M"], [252, "1A"]] as [number, string][]).map(([v, l]) => <button key={l} className={range === v ? "on" : ""} onClick={() => setRange(v)}>{l}</button>)}</div>
@@ -144,9 +147,23 @@ export default function ChartPanel({ row, hits, onClose, maximized = false, onTo
         <div><dt>SMA 200</dt><dd>{fmtNum(row.sma200)}</dd></div>
         <div><dt>RSI(14)</dt><dd>{fmtNum(row.rsi, 1)}</dd></div>
         <div><dt>Vol./méd. 21d</dt><dd>{row.volRatio == null ? "—" : fmtNum(row.volRatio, 2) + "×"}</dd></div>
-        <div><dt>RS 21d ({row.rsBench === "IFIX" ? "IFIX" : "Ibov"})</dt><dd>{row.rs21 == null ? "—" : `${row.rs21 >= 0 ? "+" : ""}${fmtNum(row.rs21, 1)} pp`}</dd></div>
+        <div><dt>RS 21d ({row.rsBench === "IFIX" ? "IFIX" : row.rsBench === "SPX" ? "S&P 500" : "Ibov"})</dt><dd>{row.rs21 == null ? "—" : `${row.rs21 >= 0 ? "+" : ""}${fmtNum(row.rs21, 1)} pp`}</dd></div>
         <div><dt>Barra</dt><dd>{row.date.split("-").reverse().join("/")}</dd></div>
       </dl>
+      {tstats && (
+        <div className="cp-hist">
+          <button className="link" onClick={() => setShowHist((v) => !v)} aria-expanded={showHist}>{showHist ? "▾" : "▸"} Histórico de sinais deste ativo (12m)</button>
+          {showHist && <>
+            <div className="tbl-wrap"><table className="hs-tbl sm">
+              <thead><tr><th>Sinal</th><th className="num">Ev.</th>{HORIZONS.map((x) => <th key={x}>+{x} preg.</th>)}</tr></thead>
+              <tbody>{SIGNAL_TYPES.filter((t) => tstats[t].events).map((t) => (
+                <tr key={t}><td><span className="hs-dot" style={{ background: SIGNAL_COLORS[t] }} />{DEFS[t].short}</td><td className="num mono">{tstats[t].events}</td>
+                  {HORIZONS.map((x) => <StatCell key={x} compact s={tstats[t][x]} bench={row.rsBench === "IFIX" ? "IFIX" : MKT.bench} />)}</tr>))}</tbody>
+            </table></div>
+            <p className="mu cp-note">Um único ativo tem poucos eventos: trate como ilustração, não como estatística.</p>
+            {CAVEATS}
+          </>}
+        </div>)}
     </section>
   );
 }

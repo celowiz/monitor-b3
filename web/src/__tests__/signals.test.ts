@@ -37,3 +37,15 @@ describe("market", () => {
     const sq = squarify(t, 100, 50); expect(sq.reduce((a, r) => a + r.w * r.h, 0)).toBeCloseTo(5000);
   });
 });
+
+import { fwdStats } from "../signals";
+describe("fwdStats", () => {
+  it("forward return vs bench and n by horizon", () => {
+    const c = Array.from({ length: 80 }, (_, i) => 10 + i);
+    const d = { ...mk(c), bc: Array(80).fill(100) };
+    const ev = [{ i: 10, t: d.t[10], type: "gap" as const, text: "", up: true }, { i: 70, t: d.t[70], type: "gap" as const, text: "", up: true }];
+    const s = fwdStats(d, ev).gap;
+    expect(s.events).toBe(2); expect(s[5].n).toBe(2); expect(s[21].n).toBe(1); expect(s[63].n).toBe(1);
+    expect(s[21].mean).toBeCloseTo(41 / 20 - 1); expect(s[21].exMean).toBeCloseTo(41 / 20 - 1); expect(s[5].hit).toBe(1);
+  });
+});

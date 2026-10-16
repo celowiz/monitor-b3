@@ -12,6 +12,9 @@ on:
     - cron: "30 13 * * 1-5" # 10:30 BRT
     - cron: "0,30 14-19 * * 1-5" # 11:00–16:30 BRT
     - cron: "0 20 * * 1-5" # 17:00 BRT
+    # NYSE 9:30–16:00 ET: em EDT já coberto acima; em EST (nov–mar) fecha 18:00 BRT.
+    - cron: "30 20 * * 1-5" # 17:30 BRT
+    - cron: "0,30 21 * * 1-5" # 18:00/18:30 BRT (fechamento NYSE no horário padrão)
   workflow_dispatch:
     inputs:
       force:
@@ -35,14 +38,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Unit tests (calendário)
-        run: python3 -m unittest tests.test_b3_calendar tests.test_b3_site -v
+        run: python3 -m unittest tests.test_b3_calendar tests.test_b3_site tests.test_nyse_calendar -v
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
           cache: pip
       - run: pip install -r requirements.txt
       - name: Unit tests (indicadores + screener legado)
-        run: python -m unittest tests.test_build_data tests.test_screener_chart tests.test_screener_filters -v
+        run: python -m unittest tests.test_build_data tests.test_history tests.test_screener_chart tests.test_screener_filters -v
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
@@ -64,9 +67,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Check B3 calendar
+      # Roda se B3 OU NYSE tiver pregão; cada mercado sempre é regenerado (o artefato do Pages
+      # substitui o site inteiro), então num feriado de um deles os dados ficam no último fechamento.
+      - name: Check B3 + NYSE calendars
         id: cal
-        run: python3 b3_calendar.py --github-output
+        run: |
+          python3 b3_calendar.py --github-output
+          python3 nyse_calendar.py --github-output
+          . <(grep -E '^(skip|skip_us)=' "$GITHUB_OUTPUT" | sed 's/^/export /')
+          if [ "$skip" = "true" ] && [ "$skip_us" = "true" ]; then echo "skip=true" >> "$GITHUB_OUTPUT"; else echo "skip=false" >> "$GITHUB_OUTPUT"; fi
 
       - uses: actions/setup-python@v5
         if: steps.cal.outputs.skip != 'true'
@@ -77,11 +86,19 @@ jobs:
         run: pip install -r requirements.txt
       - name: Unit tests
         if: steps.cal.outputs.skip != 'true'
-        run: python -m unittest tests.test_b3_calendar tests.test_build_data -v
+        run: python -m unittest tests.test_b3_calendar tests.test_nyse_calendar tests.test_build_data tests.test_history -v
 
-      - name: Gerar dados (brapi + yfinance + carteiras B3)
+      # BR e US em paralelo (downloads independentes). Falha no BR aborta; falha no US só
+      # deixa o seletor US indisponível no app.
+      - name: Gerar dados BR (brapi + yfinance + carteiras B3) e US (S&P 500)
         if: steps.cal.outputs.skip != 'true'
-        run: python scripts/build_data.py --out web/public/data
+        run: |
+          python scripts/build_data.py --market br --out web/public/data > br.log 2>&1 & BR=$!
+          python scripts/build_data.py --market us --out web/public/data > us.log 2>&1 & US=$!
+          BRC=0; USC=0; wait $BR || BRC=$?; wait $US || USC=$?
+          echo "::group::BR"; cat br.log; echo "::endgroup::"; echo "::group::US"; cat us.log; echo "::endgroup::"
+          [ $USC -eq 0 ] || echo "::warning::dados US falharam (exit $USC); publicando só BR"
+          exit $BRC
 
       - uses: actions/setup-node@v4
         if: steps.cal.outputs.skip != 'true'
@@ -96,7 +113,7 @@ jobs:
 
       - name: Exigir dados antes de publicar
         if: steps.cal.outputs.skip != 'true'
-        run: test -f web/dist/index.html && test -f web/dist/data/latest.json
+        run: test -f web/dist/index.html && test -f web/dist/data/latest.json && test -f web/dist/data/latest_br.json
 
       - uses: actions/configure-pages@v5
         if: steps.cal.outputs.skip != 'true' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'

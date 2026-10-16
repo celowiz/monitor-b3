@@ -99,3 +99,33 @@ export function squarify<T extends { liq: number }>(items: T[], W: number, H: nu
   }
   return out;
 }
+
+// Variantes "de alta" usadas no histórico (iguais às do job de dados, scripts/history.py).
+export const HIST_PARAMS: Partial<Record<BlockType, Record<string, any>>> = {
+  smaCross: { dir: "golden" }, volume: { mult: 2 }, rsi: { zone: "below", low: 30 }, rs: { min: 0 },
+  gap: { pct: 2, dir: "up" }, range: { n: 20, dir: "up" }, streak: { n: 3, dir: "up" },
+};
+export const HORIZONS = [5, 21, 63];
+export interface FwdStat { n: number; mean: number | null; median: number | null; hit: number | null; exMean: number | null; exHit: number | null }
+const med = (a: number[]) => { if (!a.length) return null; const s = [...a].sort((x, y) => x - y), m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
+const mean = (a: number[]) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : null);
+export function fwdStats(d: Candles & { bc?: (number | null)[] }, events: SignalEvent[]): Record<string, Record<number, FwdStat> & { events: number }> {
+  const out: Record<string, any> = {};
+  for (const t of ALL_SIGNALS) {
+    const ev = events.filter((e) => e.type === t);
+    const row: any = { events: ev.length };
+    for (const hz of HORIZONS) {
+      const r: number[] = [], ex: number[] = [];
+      for (const e of ev) {
+        const j = e.i + hz; if (j >= d.c.length) continue;
+        const x = d.c[j] / d.c[e.i] - 1; r.push(x);
+        const b0 = d.bc?.[e.i], b1 = d.bc?.[j];
+        if (nn(b0) && nn(b1)) ex.push(x - (b1 / b0 - 1));
+      }
+      row[hz] = { n: r.length, mean: mean(r), median: med(r), hit: r.length ? r.filter((x) => x > 0).length / r.length : null,
+        exMean: mean(ex), exHit: ex.length ? ex.filter((x) => x > 0).length / ex.length : null };
+    }
+    out[t] = row;
+  }
+  return out;
+}

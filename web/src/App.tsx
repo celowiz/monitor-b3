@@ -3,11 +3,12 @@ import Canvas, { Palette, insertBlock, totalSteps } from "./Canvas";
 import Results from "./Results";
 import Gallery from "./Gallery";
 import Market from "./Market";
+import History from "./History";
 import { decodeScreen, encodeScreen, tokenFromHash } from "./share";
 import ChartPanel from "./Chart";
 import { BlockEditor } from "./Editors";
 import { track } from "./analytics";
-import { BlockType, DEFS, Latest, Screen, blockSummary, defaultScreen, evaluate, isFilter, loadSaved, makeBlock, storeSaved } from "./engine";
+import { BlockType, DEFS, Latest, Screen, blockSummary, defaultScreen, evaluate, isFilter, loadSaved, makeBlock, storeSaved , Market as MarketId, setMarketContext } from "./engine";
 
 const useWide = () => {
   const [w, setW] = useState(window.innerWidth);
@@ -94,12 +95,31 @@ export default function App() {
     catch { window.prompt("Copie o link:", url); }
   };
 
+  const [market, setMarket] = useState<MarketId>(() => {
+    const q = new URLSearchParams(window.location.search).get("m");
+    if (q === "us" || q === "br") return q;
+    try { return localStorage.getItem("monitorb3.market") === "us" ? "us" : "br"; } catch { return "br"; }
+  });
+  const firstLoad = useRef(true);
   useEffect(() => {
-    fetch(`${import.meta.env.BASE_URL}data/latest.json`, { cache: "no-cache" })
-      .then((r) => { if (!r.ok) throw new Error(String(r.status)); return r.json(); })
-      .then((d: Latest) => { setLatest(d); if (!fromLink.current) setScreen(defaultScreen(d.defaults?.liq21MinBrl)); })
-      .catch((e) => setError(`Não foi possível carregar os dados (${e.message}).`));
-  }, []);
+    setError(null);
+    const base = import.meta.env.BASE_URL + "data/";
+    const get = (f: string) => fetch(base + f, { cache: "no-cache" }).then((r) => { if (!r.ok) throw new Error(String(r.status)); return r.json(); });
+    (market === "br" ? get("latest_br.json").catch(() => get("latest.json")) : get("latest_us.json"))
+      .then((d: Latest) => {
+        setMarketContext(market); setSel(null); setLatest(d);
+        if (!(firstLoad.current && fromLink.current)) { setScreen(defaultScreen(d.defaults?.liq21MinBrl)); setPresetIdx("builtin"); }
+        firstLoad.current = false;
+      })
+      .catch((e) => { setLatest(null); setError(market === "us" ? `Dados do S&P 500 indisponíveis nesta rodada (${e.message}).` : `Não foi possível carregar os dados (${e.message}).`); });
+  }, [market]);
+  const switchMarket = (m: MarketId) => {
+    if (m === market) return;
+    track("market_switch", { market: m });
+    try { localStorage.setItem("monitorb3.market", m); } catch { /* ignore */ }
+    const u = new URL(window.location.href); u.searchParams.set("m", m); history.replaceState(null, "", u.pathname + u.search + u.hash);
+    setMarket(m);
+  };
 
   const rows = latest?.tickers ?? [];
   const sectors = useMemo(() => Array.from(new Set(rows.map((r) => r.sector ?? "Sem setor"))).sort((a, b) => a.localeCompare(b, "pt-BR")), [rows]);
@@ -170,7 +190,7 @@ export default function App() {
     return () => window.removeEventListener("scroll", on);
   }, []);
   const sigParams = useMemo(() => Object.fromEntries(screen.blocks.filter((b) => !isFilter(b.type)).map((b) => [b.type, b.params])), [screen]);
-  const [view, setView] = useState<"telas" | "mercado">(() => (window.location.hash.includes("mercado") ? "mercado" : "telas"));
+  const [view, setView] = useState<"telas" | "historico" | "mercado">(() => (window.location.hash.includes("mercado") ? "mercado" : "telas"));
   const [chartMax, setChartMax] = useState(false);
   useEffect(() => { if (!sel) setChartMax(false); }, [sel]);
   useEffect(() => {
@@ -186,12 +206,17 @@ export default function App() {
         <div className="brand"><a href="https://celowiz.github.io/">celowiz</a> / <b>Monitor B3</b> <span className="mu sub">construtor de telas</span>
           <nav className="tabs" role="tablist">
             <button role="tab" aria-selected={view === "telas"} className={view === "telas" ? "on" : ""} onClick={() => setView("telas")}>Telas</button>
+            <button role="tab" aria-selected={view === "historico"} className={view === "historico" ? "on" : ""} onClick={() => { if (view !== "historico") track("history_tab_open"); setView("historico"); }}>Histórico</button>
             <button role="tab" aria-selected={view === "mercado"} className={view === "mercado" ? "on" : ""} onClick={() => { if (view !== "mercado") track("market_tab_open"); setView("mercado"); }}>Mercado</button>
-          </nav></div>
+          </nav>
+          <div className="seg mkt-sel" role="group" aria-label="Mercado">
+            <button className={market === "br" ? "on" : ""} aria-pressed={market === "br"} onClick={() => switchMarket("br")}>BR</button>
+            <button className={market === "us" ? "on" : ""} aria-pressed={market === "us"} onClick={() => switchMarket("us")}>US</button>
+          </div></div>
         {latest && (
           <div className="meta mono">
             <span><i className="dot" />Rodada <b>{fmtRun(latest.generatedAt)}</b></span>
-            {wide && <span>Fonte <b>brapi + yfinance</b></span>}
+            {wide && <span>Fonte <b>{market === "us" ? "Wikipedia + yfinance" : "brapi + yfinance"}</b></span>}
             {wide && <span title={latest.delayNote}>Atraso <b>~30 min</b></span>}
             <span>Universo <b>{latest.universeCount}</b>{wide ? " ativos" : ""}</span>
             <span className={latest.failedTickers.length ? "st-partial" : "st-ok"} title={latest.failedTickers.join(", ")}>
@@ -202,7 +227,7 @@ export default function App() {
 
       {error && <div className="empty">{error}</div>}
 
-      {view === "mercado" ? (latest && <Market latest={latest} wide={wide} />) : (<>
+      {view === "mercado" ? (latest && <Market key={market} latest={latest} wide={wide} />) : view === "historico" ? (latest && <History latest={latest} />) : (<>
       <div className="presets">
         <select value={presetIdx} onChange={(e) => choose(e.target.value)}>
           <option value="builtin">Máx. 52s + liq. R$ 5 mi</option>
@@ -243,7 +268,8 @@ export default function App() {
 
       <footer className="foot">
         <b>Conteúdo educativo, não é recomendação de investimento.</b>
-        {latest && <span> Rodada {fmtRun(latest.generatedAt)} · barra de {latest.dataDate?.split("-").reverse().join("/")} (provisória durante o pregão) · preços yfinance diário auto_adjust · universo e setores brapi.dev · IFIX: carteira B3 · RS: Ibovespa (^BVSP); FIIs vs IFIX (proxy {latest.benchmark.ifixProxy ?? "XFIX11"}). Máx./mín. 52s = 252 pregões excluindo hoje.</span>}
+        {latest && market === "us" && <span> Rodada {fmtRun(latest.generatedAt)} · barra de {latest.dataDate?.split("-").reverse().join("/")} (provisória durante o pregão) · preços yfinance diário auto_adjust, em US$ · universo S&P 500 e setores GICS (Wikipedia, lista em cache com data {latest.indexes?.SP500?.date ?? "—"}) · RS vs S&P 500 (^GSPC) · calendário NYSE. Máx./mín. 52s = 252 pregões excluindo hoje.</span>}
+        {latest && market === "br" && <span> Rodada {fmtRun(latest.generatedAt)} · barra de {latest.dataDate?.split("-").reverse().join("/")} (provisória durante o pregão) · preços yfinance diário auto_adjust · universo e setores brapi.dev · IFIX: carteira B3 · RS: Ibovespa (^BVSP); FIIs vs IFIX (proxy {latest.benchmark.ifixProxy ?? "XFIX11"}). Máx./mín. 52s = 252 pregões excluindo hoje.</span>}
         {" "}<a href="https://github.com/celowiz/monitor-b3">código</a>
       </footer>
     </div>
