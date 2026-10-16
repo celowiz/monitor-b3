@@ -31,6 +31,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import history  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
+AGU_CLOSES = 62  # manter igual a AGU_CLOSES em web/src/agulhada.ts
 TZ = ZoneInfo("America/Sao_Paulo")
 BRAPI = "https://brapi.dev/api/v2/tickers"
 META_PATH = ROOT / "data" / "ticker_meta.json"
@@ -308,6 +309,9 @@ def indicators(df: pd.DataFrame, bench_ret21: float | None) -> dict:
     out["upStreak"], out["downStreak"] = up, dn
     for k, s in sma.items():
         out[f"sma{k}"] = r(s.iloc[-1])
+    # últimos AGU_CLOSES fechamentos (4 algarismos significativos): o navegador calcula a Agulhada do Didi
+    # com períodos editáveis (web/src/agulhada.ts) sem baixar os candles de cada ativo.
+    out["cl"] = [float(f"{x:.4g}") for x in c.tail(AGU_CLOSES)]
     out["sma50Prev"] = r(sma[50].iloc[-2]) if n > 1 else None
     out["sma200Prev"] = r(sma[200].iloc[-2]) if n > 1 else None
     return out

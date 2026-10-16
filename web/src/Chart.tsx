@@ -3,10 +3,15 @@ import { createChart, createSeriesMarkers, CandlestickSeries, HistogramSeries, L
 import { Block, BlockType, DEFS, KIND_LABEL, MKT, Row, SIGNAL_TYPES, fmtNum, fmtPct } from "./engine";
 import { CAVEATS, StatCell } from "./History";
 import { track } from "./analytics";
+import { AGU_DEFAULTS, agulhadaSeries, normParams } from "./agulhada";
 import { type Candles, type SignalEvent, HIST_PARAMS, HORIZONS, SIGNAL_COLORS, fwdStats, historicalSignals } from "./signals";
 
 const DEFAULT_ON: BlockType[] = ["high52", "low52", "smaCross", "rsi", "gap", "volume"];
 const cache = new Map<string, Candles & { bc?: (number | null)[] }>();
+const AGU_COL = { c: "#f2d16b", m: "#c9ced2", l: "#5aa9e6" };
+const PANE_W = (n: number) => (n >= 4 ? [3, 1, 1, 1.4] : [3, 1, 1]);
+/** posição (%) do rótulo de cada painel inferior, a partir dos pesos dos painéis */
+const paneTops = (n: number) => { const w = PANE_W(n), tot = w.reduce((a, b) => a + b, 0); let acc = 0; return w.slice(0, -1).map((x) => `${((acc += x) / tot) * 100 + 0.5}%`); };
 const ts = (d: string) => (Date.parse(d + "T00:00:00Z") / 1000) as UTCTimestamp;
 
 export default function ChartPanel({ row, hits, onClose, maximized = false, onToggleMax, signalParams }: { row: Row; hits: Block[]; onClose: () => void; maximized?: boolean; onToggleMax?: () => void; signalParams?: Partial<Record<BlockType, Record<string, any>>> }) {
@@ -15,9 +20,15 @@ export default function ChartPanel({ row, hits, onClose, maximized = false, onTo
   const [data, setData] = useState<(Candles & { bc?: (number | null)[] }) | null>(cache.get(MKT.market + row.t) ?? null);
   const [err, setErr] = useState<string | null>(null);
   const [range, setRange] = useState<number>(252);
+  const rangeRef = useRef(range); rangeRef.current = range;
   const markers = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
-  const [on, setOn] = useState<Set<BlockType>>(() => new Set(DEFAULT_ON));
-  const [tip, setTip] = useState<{ x: number; y: number; d: string; ev: SignalEvent[]; rsi?: number | null; volr?: number | null } | null>(null);
+  const [on, setOn] = useState<Set<BlockType>>(() => new Set(signalParams?.agulhada ? ["agulhada"] : DEFAULT_ON));
+  const aguP = useMemo(() => normParams(signalParams?.agulhada ?? AGU_DEFAULTS), [signalParams]);
+  const aguKey = JSON.stringify(aguP);
+  const aguOn = on.has("agulhada");
+  const agu = useMemo(() => (data ? agulhadaSeries(data.c, aguP) : null), [data, aguKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const aguRef = useRef(agu); aguRef.current = agu;
+  const [tip, setTip] = useState<{ x: number; y: number; d: string; ev: SignalEvent[]; rsi?: number | null; volr?: number | null; dC?: number | null; dL?: number | null } | null>(null);
   const events = useMemo(() => (data ? historicalSignals(data, signalParams) : []), [data, signalParams]);
   const counts = useMemo(() => { const m = new Map<BlockType, number>(); for (const e of events) m.set(e.type, (m.get(e.type) ?? 0) + 1); return m; }, [events]);
   const tstats = useMemo(() => (data ? fwdStats(data, historicalSignals(data, HIST_PARAMS)) : null), [data]);
@@ -72,23 +83,41 @@ export default function ChartPanel({ row, hits, onClose, maximized = false, onTo
       vr.setData(data.t.flatMap((d, i) => (data.volr![i] == null ? [] : [{ time: ts(d), value: data.volr![i] as number, color: (data.volr![i] as number) >= 2 ? "rgba(214,167,86,.8)" : "rgba(139,145,150,.4)" }])));
       vr.createPriceLine({ price: 2, color: "#d6a756", lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true, title: "2×" });
     }
+    // Agulhada: SMAs curta/média/longa sobre o preço, faixa nas barras convergidas e painel distCurta/distLonga ± alpha
+    if (aguOn && agu) {
+      const band = c.addSeries(HistogramSeries, { priceScaleId: "agu", lastValueVisible: false, priceLineVisible: false, base: 0 });
+      c.priceScale("agu").applyOptions({ scaleMargins: { top: 0, bottom: 0 }, visible: false });
+      band.setData(data.t.map((d, i) => (agu.conv[i] ? { time: ts(d), value: 1, color: agu.side[i] > 0 ? "rgba(63,184,169,.13)" : "rgba(224,108,108,.13)" } : { time: ts(d) })));
+      line(agu.sc, AGU_COL.c); line(agu.sm, AGU_COL.m); line(agu.sl, AGU_COL.l);
+      const pc = (v: (number | null)[]) => data.t.flatMap((d, i) => (v[i] == null ? [] : [{ time: ts(d), value: (v[i] as number) * 100 }]));
+      const fmt = { type: "custom" as const, formatter: (x: number) => `${x.toFixed(1).replace(".", ",")}%`, minMove: 0.01 };
+      const dc = c.addSeries(LineSeries, { ...lineOpts, color: AGU_COL.c, priceFormat: fmt }, 3);
+      dc.setData(pc(agu.dC));
+      const dl = c.addSeries(LineSeries, { ...lineOpts, color: AGU_COL.l, priceFormat: fmt }, 3);
+      dl.setData(pc(agu.dL));
+      for (const v of [aguP.alpha, -aguP.alpha]) dc.createPriceLine({ price: v, color: "#f2d16b", lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true, title: "" });
+      dc.createPriceLine({ price: 0, color: "#3a3f44", lineWidth: 1, lineStyle: LineStyle.Dotted, axisLabelVisible: false, title: "" });
+    }
     const panes = c.panes();
-    if (panes.length === 3) { panes[0].setStretchFactor(3); panes[1].setStretchFactor(1); panes[2].setStretchFactor(1); }
+    PANE_W(panes.length).forEach((w, k) => panes[k]?.setStretchFactor(w));
     c.subscribeCrosshairMove((p) => {
       if (!p.time || !p.point || p.point.x < 0) { setTip(null); return; }
       const d = new Date((p.time as number) * 1000).toISOString().slice(0, 10), i = data.t.indexOf(d);
       const ev = evRef.current.filter((e) => e.t === d && onRef.current.has(e.type));
-      setTip({ x: p.point.x, y: p.point.y, d, ev, rsi: data.rsi?.[i], volr: data.volr?.[i] });
+      setTip({ x: p.point.x, y: p.point.y, d, ev, rsi: data.rsi?.[i], volr: data.volr?.[i], dC: aguRef.current?.dC[i], dL: aguRef.current?.dL[i] });
     });
+    // reaplica a janela de tempo escolhida após recriar o gráfico (toggle da Agulhada recria as séries)
+    const n = data.t.length; c.timeScale().setVisibleLogicalRange({ from: Math.max(0, n - rangeRef.current), to: n + 2 });
     return () => { c.remove(); chart.current = null; markers.current = null; };
-  }, [data]);
+  }, [data, aguOn, agu]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const onRef = useRef(on); onRef.current = on;
   useEffect(() => {
     if (!markers.current) return;
     const m: SeriesMarker<Time>[] = events.filter((e) => on.has(e.type)).map((e) => ({
-      time: ts(e.t), position: e.up ? "belowBar" : "aboveBar", shape: e.type === "high52" || e.type === "low52" ? (e.up ? "arrowUp" : "arrowDown") : "circle",
-      color: SIGNAL_COLORS[e.type], size: e.type === "high52" || e.type === "low52" || e.type === "smaCross" ? 1 : 0.6,
+      time: ts(e.t), position: e.up ? "belowBar" : "aboveBar", shape: e.type === "high52" || e.type === "low52" || e.type === "agulhada" ? (e.up ? "arrowUp" : "arrowDown") : "circle",
+      color: e.type === "agulhada" ? (e.up ? "#3fb8a9" : "#e06c6c") : SIGNAL_COLORS[e.type], size: e.type === "high52" || e.type === "low52" || e.type === "smaCross" || e.type === "agulhada" ? 1 : 0.6,
+      ...(e.type === "agulhada" ? { text: e.up ? "A▲" : "A▼" } : {}),
     }));
     markers.current.setMarkers(m);
   }, [events, on, data]);
@@ -123,7 +152,8 @@ export default function ChartPanel({ row, hits, onClose, maximized = false, onTo
         <div className="seg">{([[63, "3M"], [126, "6M"], [252, "1A"]] as [number, string][]).map(([v, l]) => <button key={l} className={range === v ? "on" : ""} onClick={() => setRange(v)}>{l}</button>)}</div>
         <span className="mu">Diário</span>
       </div>
-      <div className="legend"><span><i style={{ background: "#d6a756" }} />SMA 50</span><span><i style={{ background: "#7c8cf0" }} />SMA 200</span><span><i className="dash" />Máx. 52s</span><span><i style={{ background: "rgba(63,184,169,.5)" }} />Volume</span></div>
+      <div className="legend"><span><i style={{ background: "#d6a756" }} />SMA 50</span><span><i style={{ background: "#7c8cf0" }} />SMA 200</span><span><i className="dash" />Máx. 52s</span><span><i style={{ background: "rgba(63,184,169,.5)" }} />Volume</span>
+        {aguOn && <><span><i style={{ background: AGU_COL.c }} />SMA {aguP.curta}</span><span><i style={{ background: AGU_COL.m }} />SMA {aguP.media}</span><span><i style={{ background: AGU_COL.l }} />SMA {aguP.longa}</span><span><i className="box" style={{ background: "rgba(63,184,169,.3)" }} />Convergência (compra)</span><span><i className="box" style={{ background: "rgba(224,108,108,.3)" }} />(venda)</span></>}</div>
       <div className="sig-tg" role="group" aria-label="Sinais no gráfico">
         {SIGNAL_TYPES.map((t) => (
           <button key={t} className={"sig-chip" + (on.has(t) ? " on" : "")} aria-pressed={on.has(t)} onClick={() => toggle(t)} title={DEFS[t].label}>
@@ -135,9 +165,10 @@ export default function ChartPanel({ row, hits, onClose, maximized = false, onTo
           <div className="cp-tip mono" style={{ left: Math.min(tip.x + 14, (el.current?.clientWidth ?? 400) - 190), top: Math.max(4, Math.min(tip.y - 10, 120)) }}>
             <b>{tip.d.split("-").reverse().join("/")}</b>
             {tip.ev.map((e, k) => <div key={k}><i style={{ background: SIGNAL_COLORS[e.type] }} />{e.text}</div>)}
+            {aguOn && tip.dC != null && <div className="mu">distCurta {fmtNum(tip.dC * 100, 2)}% · distLonga {fmtNum((tip.dL ?? 0) * 100, 2)}%</div>}
             <div className="mu">RSI {tip.rsi == null ? "—" : fmtNum(tip.rsi, 0)} · Vol {tip.volr == null ? "—" : fmtNum(tip.volr, 1) + "×"}</div>
           </div>)}
-        <div className="pane-lbl" style={{ top: "60.5%" }}>RSI(14) · 30/70</div><div className="pane-lbl" style={{ top: "80.5%" }}>Vol. relativo · 2×</div>
+        {paneTops(aguOn ? 4 : 3).map((top, k) => <div key={k} className="pane-lbl" style={{ top }}>{["RSI(14) · 30/70", "Vol. relativo · 2×", `Agulhada · distCurta / distLonga · ±${String(aguP.alpha).replace(".", ",")}%`][k]}</div>)}
       </div>
       <p className="cp-note mu">Marcadores: dias em que cada sinal teria disparado no último ano, com os parâmetros da tela atual. Fins educativos, sem garantia de resultado futuro.</p>
       <dl className="stats mono">

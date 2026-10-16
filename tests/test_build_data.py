@@ -19,6 +19,13 @@ class IndicatorTests(unittest.TestCase):
         self.assertEqual(ind["upStreak"], 3)
         self.assertEqual(ind["maxC20"], 12.0)
 
+    def test_closes_for_agulhada(self):
+        closes = [10 + i * 0.123456 for i in range(300)]
+        ind = bd.indicators(self.frame(closes), 0.0)
+        self.assertEqual(len(ind["cl"]), bd.AGU_CLOSES)
+        self.assertAlmostEqual(ind["cl"][-1], ind["price"], places=2)
+        self.assertEqual(ind["cl"][0], float(f"{closes[-bd.AGU_CLOSES]:.4g}"))
+
     def test_rsi_bounds(self):
         ind = bd.indicators(self.frame([10 + (i % 5) for i in range(300)]), 0.0)
         self.assertTrue(0 <= ind["rsi"] <= 100)

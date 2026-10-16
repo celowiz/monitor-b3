@@ -1,4 +1,13 @@
 import { Block, KIND_LABEL, Kind , MKT } from "./engine";
+import { AGU_LIMITS } from "./agulhada";
+import { track } from "./analytics";
+
+// GA4: mudanças de parâmetro com debounce por parâmetro (números disparam a cada tecla).
+const pend = new Map<string, ReturnType<typeof setTimeout>>();
+function trackParam(block_type: string, param: string, value: string | number | boolean) {
+  const k = block_type + ":" + param; clearTimeout(pend.get(k));
+  pend.set(k, setTimeout(() => { pend.delete(k); track("block_param_change", { block_type, param, value }); }, 800));
+}
 
 interface Props { block: Block; sectors: string[]; tree?: Record<string, string[]>; onParams: (p: Record<string, any>) => void }
 
@@ -126,6 +135,29 @@ export function BlockEditor({ block, sectors, tree = {}, onParams }: Props) {
           <Seg value={p.dir} options={[["up", "Altas"], ["down", "Baixas"]]} onChange={(v) => onParams({ dir: v })} />
         </div>
       );
+    case "agulhada": {
+      const set = (k: string, v: string | number | boolean) => { trackParam("agulhada", k, v); onParams({ [k]: v }); };
+      const int = (k: keyof typeof AGU_LIMITS) => (v: number) => { const [lo, hi] = AGU_LIMITS[k]; set(k, Math.min(hi, Math.max(lo, Math.round(v || lo)))); };
+      return (
+        <div className="col nodrag agu-ed">
+          <div className="row"><span className="ed-l">Direção</span>
+            <Seg value={p.dir} options={[["buy", "Compra ▲"], ["sell", "Venda ▼"], ["both", "Ambos"]]} onChange={(v) => set("dir", v)} /></div>
+          <div className="row"><span className="ed-l">Alpha</span>
+            <span className="ed-a"><Num value={p.alpha} step={0.1} suffix="% convergência" onChange={(v) => set("alpha", Math.min(10, Math.max(0.1, v || 0.1)))} /></span></div>
+          <div className="row"><span className="ed-l">Médias</span>
+            <Num value={p.curta} onChange={int("curta")} suffix="c" />
+            <Num value={p.media} onChange={int("media")} suffix="m" />
+            <Num value={p.longa} onChange={int("longa")} suffix="l" /></div>
+          <div className="row"><span className="ed-l">Janela</span>
+            <Num value={p.window} onChange={int("window")} suffix={p.window > 1 ? "últimos pregões" : "pregão (hoje)"} /></div>
+          <label className="ck"><input type="checkbox" checked={p.fresh} onChange={(e) => set("fresh", e.target.checked)} />só o 1º dia da convergência</label>
+          <div className="row">
+            <label className="ck"><input type="checkbox" checked={p.confirm} onChange={(e) => set("confirm", e.target.checked)} />abrir em leque em até</label>
+            <Num value={p.confirmN} onChange={int("confirmN")} suffix="preg." />
+          </div>
+        </div>
+      );
+    }
     case "rs":
       return <Num value={p.min} step={0.5} suffix="pp vs índice (21d)" onChange={(v) => onParams({ min: v })} />;
     default:

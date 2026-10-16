@@ -246,3 +246,6 @@ tbody tr,.card{animation:rowin .32s ease both}
 .gal-mini .off rect{opacity:.45}.gal-mini path.off{stroke-dasharray:2 3}
 .gal-mini .res rect{fill:var(--tealD);stroke:var(--teal)}
 .ln-body,.ln-d{pointer-events:none}.ln-body .ln-t{pointer-events:auto}.ln .react-flow__handle,.rn .react-flow__handle{z-index:3}
+/* Agulhada: editor compacto */
+.agu-ed .row{flex-wrap:wrap;gap:6px;align-items:center}.agu-ed .ed-l{width:52px;font-size:10px;color:var(--di);text-transform:uppercase;letter-spacing:.04em}
+.agu-ed .ed-num input{width:46px}.agu-ed .ed-num{gap:4px}.agu-ed .ed-a input{width:54px}

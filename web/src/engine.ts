@@ -1,3 +1,4 @@
+import { AGU_DEFAULTS, agulhadaHit } from "./agulhada";
 import { evaluateGraph, migrateScreen, type Problem } from "./graph";
 // Modelo de blocos + avaliação client-side das telas.
 export type Kind = "acao" | "bdr" | "etf" | "fii";
@@ -10,6 +11,8 @@ export interface Row {
   sma20: number | null; sma50: number | null; sma200: number | null; sma50Prev: number | null; sma200Prev: number | null;
   gap?: number | null; maxC20?: number | null; minC20?: number | null; maxC60?: number | null; minC60?: number | null;
   upStreak?: number; downStreak?: number;
+  /** últimos fechamentos (o último = price), para sinais com períodos editáveis (Agulhada) */
+  cl?: number[];
 }
 
 export type Market = "br" | "us";
@@ -34,7 +37,7 @@ export interface Latest {
 
 export type BlockType =
   | "universe" | "sector" | "liquidity" | "minPrice" | "chgRange" | "blocklist" | "sma200" | "index"
-  | "high52" | "low52" | "smaCross" | "volume" | "rsi" | "rs" | "gap" | "range" | "streak"
+  | "high52" | "low52" | "smaCross" | "volume" | "rsi" | "rs" | "gap" | "range" | "streak" | "agulhada"
   | "and" | "or" | "result";
 
 export interface Block {
@@ -46,7 +49,7 @@ export interface GEdge { id: string; source: string; target: string }
 export interface Screen { name: string; blocks: Block[]; edges: GEdge[]; combine?: "and" | "or"; builtin?: boolean }
 
 export const FILTER_TYPES: BlockType[] = ["universe", "sector", "liquidity", "minPrice", "chgRange", "blocklist", "sma200", "index"];
-export const SIGNAL_TYPES: BlockType[] = ["high52", "low52", "smaCross", "volume", "rsi", "rs", "gap", "range", "streak"];
+export const SIGNAL_TYPES: BlockType[] = ["high52", "low52", "smaCross", "volume", "rsi", "rs", "gap", "range", "streak", "agulhada"];
 export const LOGIC_TYPES: BlockType[] = ["and", "or"];
 export const isFilter = (t: BlockType) => FILTER_TYPES.includes(t);
 export const isSignal = (t: BlockType) => SIGNAL_TYPES.includes(t);
@@ -75,6 +78,7 @@ export const DEFS: Record<BlockType, BlockDef> = {
   and: { label: "E (todos)", icon: "E", group: "Lógica", short: "E", defaults: {} },
   or: { label: "OU (qualquer)", icon: "OU", group: "Lógica", short: "OU", defaults: {} },
   result: { label: "Resultado", icon: "●", group: "Saída", short: "Resultado", defaults: {} },
+  agulhada: { label: "Agulhada do Didi", icon: "⋈", group: "Sinais", short: "Agulhada", defaults: { ...AGU_DEFAULTS } },
   streak: { label: "Sequência de altas/baixas", icon: "⋰", group: "Sinais", short: "Sequência", defaults: { n: 3, dir: "up" } },
 };
 
@@ -143,6 +147,7 @@ export function signalHit(b: Block, r: Row): boolean {
       const upHit = mx != null && r.price > mx, dnHit = mn != null && r.price < mn;
       return p.dir === "up" ? upHit : p.dir === "down" ? dnHit : upHit || dnHit;
     }
+    case "agulhada": return agulhadaHit(r.cl, p) != null;
     case "streak": return (p.dir === "up" ? r.upStreak ?? 0 : r.downStreak ?? 0) >= Number(p.n);
   }
   return false;
@@ -167,6 +172,11 @@ export function blockSummary(b: Block): string {
     case "gap": return `|abertura − fech. ontem| ≥ ${p.pct}% · ${({ up: "alta", down: "baixa", both: "ambos" } as any)[p.dir]}`;
     case "range": return p.dir === "up" ? `fech. > máx. ${p.n} fech. (ex-hoje)` : p.dir === "down" ? `fech. < mín. ${p.n} fech. (ex-hoje)` : `rompe máx./mín. ${p.n} fech.`;
     case "streak": return `${p.n}+ fech. seguidos em ${p.dir === "up" ? "alta" : "baixa"}`;
+    case "agulhada": {
+      const d = ({ buy: "compra", sell: "venda", both: "compra ou venda" } as any)[p.dir];
+      const w = Number(p.window) > 1 ? `últimos ${p.window} preg.` : "hoje";
+      return `SMA ${p.curta}/${p.media}/${p.longa} · conv. < ${String(p.alpha).replace(".", ",")}% · ${d} · ${w}${p.fresh ? " · 1º dia" : ""}${p.confirm ? ` · abertura ≤ ${p.confirmN}d` : ""}`;
+    }
     case "and": return "todas as entradas (interseção)";
     case "or": return "qualquer entrada (união)";
     case "result": return "ativos que chegam aqui";
