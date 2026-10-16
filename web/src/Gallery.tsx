@@ -1,28 +1,23 @@
-import { DEFS, Screen, isFilter } from "./engine";
+import { DEFS, Screen, isLogic, isSignal } from "./engine";
 import { PRESETS } from "./presets";
 
 function Mini({ s }: { s: Screen }) {
-  const f = s.blocks.filter((b) => b.enabled && isFilter(b.type)), g = s.blocks.filter((b) => b.enabled && !isFilter(b.type));
-  const W = 64, H = 18, gap = 14, y0 = 8;
-  const sy = (i: number) => y0 + i * (H + 6);
-  const midY = sy(Math.max(0, (g.length - 1) / 2));
-  const sx = f.length * (W + gap);
-  const h = Math.max(sy(g.length - 1), midY) + H + y0;
+  // Prévia do grafo: usa as posições do layout automático, reduzidas.
+  const k = 0.22, W = 64, H = 18;
+  const ps = s.blocks.map((b) => ({ b, x: (b.pos?.x ?? 0) * k, y: (b.pos?.y ?? 0) * k }));
+  const minY = Math.min(...ps.map((p) => p.y)), maxX = Math.max(...ps.map((p) => p.x)) + W, maxY = Math.max(...ps.map((p) => p.y)) - minY + H;
+  const at = new Map(ps.map((p) => [p.b.id, { ...p, y: p.y - minY + 4 }]));
   return (
-    <svg className="gal-mini" viewBox={`0 0 ${sx + W + gap + 44} ${h}`} role="img" aria-label="prévia dos blocos">
-      {f.map((b, i) => <g key={b.id}>
-        <rect x={i * (W + gap)} y={midY} width={W} height={H} rx="4" />
-        <text x={i * (W + gap) + W / 2} y={midY + 12}>{DEFS[b.type].short}</text>
-        <line x1={i * (W + gap) + W} y1={midY + H / 2} x2={(i + 1) * (W + gap)} y2={i === f.length - 1 ? midY + H / 2 : midY + H / 2} />
-      </g>)}
-      {g.map((b, i) => <g key={b.id} className="sg">
-        <path d={`M${sx - gap} ${midY + H / 2} C${sx - 4} ${midY + H / 2} ${sx - 10} ${sy(i) + H / 2} ${sx} ${sy(i) + H / 2}`} />
-        <rect x={sx} y={sy(i)} width={W} height={H} rx="4" />
-        <text x={sx + W / 2} y={sy(i) + 12}>{DEFS[b.type].short}</text>
-        <path d={`M${sx + W} ${sy(i) + H / 2} C${sx + W + 10} ${sy(i) + H / 2} ${sx + W + 4} ${midY + H / 2} ${sx + W + gap} ${midY + H / 2}`} />
-      </g>)}
-      <rect className="res" x={sx + W + gap} y={midY} width={40} height={H} rx="4" />
-      <text className="res" x={sx + W + gap + 20} y={midY + 12}>{s.combine === "or" ? "OU" : "E"}</text>
+    <svg className="gal-mini" viewBox={`-2 0 ${maxX + 4} ${maxY + 8}`} role="img" aria-label="prévia do grafo">
+      {s.edges.map((e) => { const a = at.get(e.source), b = at.get(e.target); if (!a || !b) return null;
+        const x1 = a.x + W, y1 = a.y + H / 2, x2 = b.x, y2 = b.y + H / 2, mx = (x1 + x2) / 2;
+        return <path key={e.id} className={a.b.enabled ? "" : "off"} d={`M${x1} ${y1} C${mx} ${y1} ${mx} ${y2} ${x2} ${y2}`} />; })}
+      {[...at.values()].map(({ b, x, y }) => (
+        <g key={b.id} className={(isSignal(b.type) ? "sg" : isLogic(b.type) || b.type === "result" ? "res" : "") + (b.enabled ? "" : " off")}>
+          <rect x={x} y={y} width={W} height={H} rx={b.type === "universe" || b.type === "result" ? 9 : isLogic(b.type) ? 2 : 4} />
+          <text x={x + W / 2} y={y + 12}>{DEFS[b.type].short}</text>
+        </g>
+      ))}
     </svg>
   );
 }

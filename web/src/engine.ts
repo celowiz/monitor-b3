@@ -1,3 +1,4 @@
+import { evaluateGraph, migrateScreen, type Problem } from "./graph";
 // Modelo de blocos + avaliação client-side das telas.
 export type Kind = "acao" | "bdr" | "etf" | "fii";
 
@@ -33,21 +34,27 @@ export interface Latest {
 
 export type BlockType =
   | "universe" | "sector" | "liquidity" | "minPrice" | "chgRange" | "blocklist" | "sma200" | "index"
-  | "high52" | "low52" | "smaCross" | "volume" | "rsi" | "rs" | "gap" | "range" | "streak";
+  | "high52" | "low52" | "smaCross" | "volume" | "rsi" | "rs" | "gap" | "range" | "streak"
+  | "and" | "or" | "result";
 
 export interface Block {
   id: string; type: BlockType; enabled: boolean; params: Record<string, any>;
   pos?: { x: number; y: number };
 }
-export interface Screen { name: string; combine: "and" | "or"; blocks: Block[]; builtin?: boolean }
+export interface GEdge { id: string; source: string; target: string }
+/** Tela = grafo: nós (blocks) + arestas explícitas. `combine` só existe em telas antigas (v1) e é convertido por migrateScreen. */
+export interface Screen { name: string; blocks: Block[]; edges: GEdge[]; combine?: "and" | "or"; builtin?: boolean }
 
 export const FILTER_TYPES: BlockType[] = ["universe", "sector", "liquidity", "minPrice", "chgRange", "blocklist", "sma200", "index"];
 export const SIGNAL_TYPES: BlockType[] = ["high52", "low52", "smaCross", "volume", "rsi", "rs", "gap", "range", "streak"];
+export const LOGIC_TYPES: BlockType[] = ["and", "or"];
 export const isFilter = (t: BlockType) => FILTER_TYPES.includes(t);
+export const isSignal = (t: BlockType) => SIGNAL_TYPES.includes(t);
+export const isLogic = (t: BlockType) => t === "and" || t === "or";
 
 export const KIND_LABEL: Record<Kind, string> = { acao: "Ação", bdr: "BDR", etf: "ETF", fii: "FII" };
 
-export interface BlockDef { label: string; icon: string; group: "Entrada" | "Filtros" | "Sinais"; short: string; defaults: Record<string, any> }
+export interface BlockDef { label: string; icon: string; group: "Entrada" | "Filtros" | "Sinais" | "Lógica" | "Saída"; short: string; defaults: Record<string, any> }
 export const DEFS: Record<BlockType, BlockDef> = {
   universe: { label: "Universo", icon: "◎", group: "Entrada", short: "Universo", defaults: { kinds: ["acao", "bdr"] } },
   sector: { label: "Setor / subsetor", icon: "▦", group: "Filtros", short: "Setor", defaults: { sectors: [], subsectors: [] } },
@@ -65,6 +72,9 @@ export const DEFS: Record<BlockType, BlockDef> = {
   rs: { label: "Força rel. vs índice", icon: "↗", group: "Sinais", short: "RS vs Ibov", defaults: { min: 0 } },
   gap: { label: "Gap de abertura", icon: "⇕", group: "Sinais", short: "Gap", defaults: { pct: 2, dir: "both" } },
   range: { label: "Rompimento de faixa", icon: "⇥", group: "Sinais", short: "Faixa N d", defaults: { n: 20, dir: "up" } },
+  and: { label: "E (todos)", icon: "E", group: "Lógica", short: "E", defaults: {} },
+  or: { label: "OU (qualquer)", icon: "OU", group: "Lógica", short: "OU", defaults: {} },
+  result: { label: "Resultado", icon: "●", group: "Saída", short: "Resultado", defaults: {} },
   streak: { label: "Sequência de altas/baixas", icon: "⋰", group: "Sinais", short: "Sequência", defaults: { n: 3, dir: "up" } },
 };
 
@@ -75,15 +85,15 @@ export const makeBlock = (type: BlockType, enabled = true, params?: Record<strin
 });
 
 export function defaultScreen(liqMin = 5_000_000): Screen {
-  return {
+  return migrateScreen({
     name: "Máx. 52s + liq. R$ 5 mi", combine: "and", builtin: true,
     blocks: [
       makeBlock("universe"), makeBlock("sector"), makeBlock("liquidity", true, { min: liqMin }), makeBlock("minPrice", true, { min: 1 }),
-      makeBlock("high52", true), makeBlock("low52", false), makeBlock("smaCross", false), makeBlock("volume", false),
-      makeBlock("rsi", false), makeBlock("rs", false),
-      makeBlock("gap", false), makeBlock("range", false), makeBlock("streak", false),
+      // Grafo enxuto: os outros sinais ficam na paleta (antes eram 8 blocos desligados ocupando o canvas).
+      makeBlock("high52", true),
     ],
-  };
+    edges: [],
+  });
 }
 
 export function filterPass(b: Block, r: Row): boolean {
@@ -157,31 +167,20 @@ export function blockSummary(b: Block): string {
     case "gap": return `|abertura − fech. ontem| ≥ ${p.pct}% · ${({ up: "alta", down: "baixa", both: "ambos" } as any)[p.dir]}`;
     case "range": return p.dir === "up" ? `fech. > máx. ${p.n} fech. (ex-hoje)` : p.dir === "down" ? `fech. < mín. ${p.n} fech. (ex-hoje)` : `rompe máx./mín. ${p.n} fech.`;
     case "streak": return `${p.n}+ fech. seguidos em ${p.dir === "up" ? "alta" : "baixa"}`;
+    case "and": return "todas as entradas (interseção)";
+    case "or": return "qualquer entrada (união)";
+    case "result": return "ativos que chegam aqui";
     case "rs": return MKT.market === "us" ? `ret. 21d − S&P 500 > ${p.min} pp` : `ret. 21d − índice > ${p.min} pp (Ibov; FII: IFIX)`;
   }
 }
 
-export interface Evaluated { filtered: Row[]; results: Row[]; hits: Map<string, Block[]>; perBlock: Map<string, number> }
-
-export function evaluate(screen: Screen, rows: Row[]): Evaluated {
-  const filters = screen.blocks.filter((b) => isFilter(b.type));
-  const signals = screen.blocks.filter((b) => !isFilter(b.type) && b.enabled);
-  const perBlock = new Map<string, number>();
-  let cur = rows;
-  for (const f of filters) { cur = cur.filter((r) => filterPass(f, r)); perBlock.set(f.id, cur.length); }
-  const filtered = cur;
-  const hits = new Map<string, Block[]>();
-  for (const s of screen.blocks.filter((b) => !isFilter(b.type))) {
-    let n = 0;
-    for (const r of filtered) if (signalHit(s, r)) { n++; if (s.enabled) { const a = hits.get(r.t) || []; a.push(s); hits.set(r.t, a); } }
-    perBlock.set(s.id, n);
-  }
-  const results = !signals.length ? filtered : filtered.filter((r) => {
-    const h = hits.get(r.t)?.length ?? 0;
-    return screen.combine === "and" ? h === signals.length : h > 0;
-  });
-  return { filtered, results, hits, perBlock };
+export interface Evaluated {
+  filtered: Row[]; results: Row[]; hits: Map<string, Block[]>; perBlock: Map<string, number>;
+  /** tamanho do conjunto que entra em cada nó (null = sem entrada calculável) */
+  perIn: Map<string, number | null>; problems: Problem[]; complete: boolean;
 }
+
+export function evaluate(screen: Screen, rows: Row[]): Evaluated { return evaluateGraph(migrateScreen(screen), rows); }
 
 export function fmtBrl(v: number | null | undefined): string {
   if (v == null) return "—";
@@ -197,10 +196,5 @@ export const fmtNum = (v: number | null | undefined, d = 2) =>
 export const fmtPct = (v: number | null | undefined, d = 1) =>
   v == null ? "—" : `${v >= 0 ? "+" : ""}${(v * 100).toLocaleString("pt-BR", { minimumFractionDigits: d, maximumFractionDigits: d })}%`;
 
-const KEY = "monitorb3.screens.v1";
-export function loadSaved(): Screen[] {
-  try { return JSON.parse(localStorage.getItem(KEY) || "[]"); } catch { return []; }
-}
-export function storeSaved(s: Screen[]) { localStorage.setItem(KEY, JSON.stringify(s)); }
 
 export const parseList = (s: string) => (s || "").toUpperCase().split(/[^A-Z0-9]+/).filter(Boolean);
