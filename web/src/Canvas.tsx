@@ -1,7 +1,7 @@
 import { track } from "./analytics";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  ReactFlow, Background, Controls, MiniMap, Handle, Position, useReactFlow, ReactFlowProvider, BaseEdge, getSmoothStepPath, getBezierPath,
+  ReactFlow, Background, Controls, Handle, Position, useReactFlow, ReactFlowProvider, BaseEdge, getSmoothStepPath, getBezierPath,
   type Node, type Edge, type NodeProps, type NodeChange, type EdgeProps, BackgroundVariant,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
@@ -202,7 +202,6 @@ function Inner({ screen, counts, total, filteredCount, resultCount, sectors, tre
         nodesConnectable={false} deleteKeyCode={["Delete", "Backspace"]} colorMode="dark">
         <Background variant={BackgroundVariant.Dots} gap={18} size={1} color="#22262a" />
         <Controls showInteractive={false} position="bottom-left" />
-        <MiniMap pannable zoomable position="bottom-right" nodeColor={(n) => (n.type === "block" ? ((n.data as any).block.enabled ? "#3fb8a9" : "#2c3136") : "#8b9196")} maskColor="rgba(10,11,12,.7)" style={{ background: "#101214" }} />
       </ReactFlow>
       <div className="canvas-hint">{total} no universo · arraste blocos da paleta ou clique para adicionar · ⌘/Ctrl + rolar para zoom</div>
     </div>
