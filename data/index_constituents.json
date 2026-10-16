@@ -1,6 +1,6 @@
 {
 "IBOV": {
-"date": "15/10/26",
+"date": "16/10/26",
 "source": "B3 indexProxy GetPortfolioDay (carteira do dia)",
 "tickers": [
 "ABEV3",
@@ -82,7 +82,7 @@
 ]
 },
 "IFIX": {
-"date": "15/10/26",
+"date": "16/10/26",
 "source": "B3 indexProxy GetPortfolioDay (carteira do dia)",
 "tickers": [
 "AFHI11",
@@ -185,7 +185,7 @@
 ]
 },
 "SMLL": {
-"date": "15/10/26",
+"date": "16/10/26",
 "source": "B3 indexProxy GetPortfolioDay (carteira do dia)",
 "tickers": [
 "ABCB4",
