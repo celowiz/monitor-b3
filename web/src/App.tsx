@@ -10,7 +10,7 @@ import History from "./History";
 import { decodeScreen, encodeScreen, tokenFromHash } from "./share";
 import ChartPanel from "./Chart";
 import { BlockEditor } from "./Editors";
-import { track } from "./analytics";
+import { track, trackOutbound } from "./analytics";
 import { DEFS, Evaluated, Latest, Screen, blockSummary, defaultScreen, evaluate, isFilter, isLogic, isSignal, newId, Market as MarketId, setMarketContext } from "./engine";
 
 const useWide = () => {
@@ -217,7 +217,7 @@ export default function App() {
   return (
     <div className={"app" + (wide ? "" : " mobile")}>
       <header className="top">
-        <div className="brand"><a href="https://celowiz.github.io/">celowiz</a> / <b>Monitor B3</b> <span className="mu sub">construtor de telas</span>
+        <div className="brand"><a href="https://celowiz.github.io/" onClick={() => trackOutbound("portfolio", "https://celowiz.github.io/", "celowiz")}>celowiz</a> / <b>Monitor B3</b> <span className="mu sub">construtor de telas</span>
           <nav className="tabs" role="tablist">
             <button role="tab" aria-selected={view === "telas"} className={view === "telas" ? "on" : ""} onClick={() => setView("telas")}>Telas</button>
             <button role="tab" aria-selected={view === "historico"} className={view === "historico" ? "on" : ""} onClick={() => { if (view !== "historico") track("history_tab_open"); setView("historico"); }}>Histórico</button>
@@ -280,7 +280,7 @@ export default function App() {
         <b>Conteúdo educativo, não é recomendação de investimento.</b>
         {latest && market === "us" && <span> Rodada {fmtRun(latest.generatedAt)} · barra de {latest.dataDate?.split("-").reverse().join("/")} (provisória durante o pregão) · preços yfinance diário auto_adjust, em US$ · universo S&P 500 e setores GICS (Wikipedia, lista em cache com data {latest.indexes?.SP500?.date ?? "—"}) · RS vs S&P 500 (^GSPC) · calendário NYSE. Máx./mín. 52s = 252 pregões excluindo hoje.</span>}
         {latest && market === "br" && <span> Rodada {fmtRun(latest.generatedAt)} · barra de {latest.dataDate?.split("-").reverse().join("/")} (provisória durante o pregão) · preços yfinance diário auto_adjust · universo e setores brapi.dev · IFIX: carteira B3 · RS: Ibovespa (^BVSP); FIIs vs IFIX (proxy {latest.benchmark.ifixProxy ?? "XFIX11"}). Máx./mín. 52s = 252 pregões excluindo hoje.</span>}
-        {" "}<a href="https://github.com/celowiz/monitor-b3">código</a>
+        {" "}<a href="https://github.com/celowiz/monitor-b3" onClick={() => trackOutbound("code", "https://github.com/celowiz/monitor-b3", "código")}>código</a>
       </footer>
     </div>
   );
