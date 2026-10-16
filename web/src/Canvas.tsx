@@ -196,14 +196,14 @@ function Inner({ screen, counts, total, filteredCount, resultCount, sectors, tre
 
   return (
     <div className="canvas" ref={wrap} onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; }} onDrop={onDrop}>
-      <ReactFlow nodes={nodes} edges={edges} nodeTypes={nodeTypes} edgeTypes={edgeTypes} onNodesChange={onNodesChange}
+      <ReactFlow zoomOnScroll={false} panOnScroll={false} preventScrolling={false} zoomOnPinch zoomActivationKeyCode={["Meta","Control"]} panOnDrag nodes={nodes} edges={edges} nodeTypes={nodeTypes} edgeTypes={edgeTypes} onNodesChange={onNodesChange}
         fitView fitViewOptions={{ padding: 0.12 }} minZoom={0.3} maxZoom={1.6} proOptions={{ hideAttribution: true }}
         nodesConnectable={false} deleteKeyCode={["Delete", "Backspace"]} colorMode="dark">
         <Background variant={BackgroundVariant.Dots} gap={18} size={1} color="#22262a" />
         <Controls showInteractive={false} position="bottom-left" />
         <MiniMap pannable zoomable position="bottom-right" nodeColor={(n) => (n.type === "block" ? ((n.data as any).block.enabled ? "#3fb8a9" : "#2c3136") : "#8b9196")} maskColor="rgba(10,11,12,.7)" style={{ background: "#101214" }} />
       </ReactFlow>
-      <div className="canvas-hint">{total} no universo · arraste blocos da paleta ou clique para adicionar</div>
+      <div className="canvas-hint">{total} no universo · arraste blocos da paleta ou clique para adicionar · ⌘/Ctrl + rolar para zoom</div>
     </div>
   );
 }

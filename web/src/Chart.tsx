@@ -6,7 +6,7 @@ interface Candles { t: string[]; o: number[]; h: number[]; l: number[]; c: numbe
 const cache = new Map<string, Candles>();
 const ts = (d: string) => (Date.parse(d + "T00:00:00Z") / 1000) as UTCTimestamp;
 
-export default function ChartPanel({ row, hits, onClose }: { row: Row; hits: Block[]; onClose: () => void }) {
+export default function ChartPanel({ row, hits, onClose, maximized = false, onToggleMax }: { row: Row; hits: Block[]; onClose: () => void; maximized?: boolean; onToggleMax?: () => void }) {
   const el = useRef<HTMLDivElement>(null);
   const chart = useRef<IChartApi | null>(null);
   const [data, setData] = useState<Candles | null>(cache.get(row.t) ?? null);
@@ -54,6 +54,11 @@ export default function ChartPanel({ row, hits, onClose }: { row: Row; hits: Blo
     chart.current.timeScale().setVisibleLogicalRange({ from: Math.max(0, n - range), to: n + 2 });
   }, [range, data]);
 
+  useEffect(() => {
+    const t = setTimeout(() => chart.current?.timeScale().fitContent(), 320);
+    return () => clearTimeout(t);
+  }, [maximized]);
+
   const up = (row.chg ?? 0) >= 0;
   return (
     <section className="chart-panel">
@@ -63,6 +68,7 @@ export default function ChartPanel({ row, hits, onClose }: { row: Row; hits: Blo
           <div className="cp-t">{row.t}</div>
           <div className="cp-s">{row.name} · {row.sector ?? "—"} · {KIND_LABEL[row.kind]}</div>
         </div>
+        {onToggleMax && <button className="close cp-max" onClick={onToggleMax} aria-label={maximized ? "restaurar" : "tela cheia"} title={maximized ? "Restaurar (Esc)" : "Tela cheia"}>{maximized ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/></svg> : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>}</button>}
         <button className="close" onClick={onClose} aria-label="fechar">×</button>
       </div>
       <div className="cp-price mono">R$ {fmtNum(row.price)} <span className={up ? "up" : "dn"}>{fmtPct(row.chg)}</span></div>

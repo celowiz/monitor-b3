@@ -118,6 +118,19 @@ export default function App() {
     const next = saved.filter((_, j) => j !== Number(presetIdx));
     setSaved(next); storeSaved(next); choose("builtin");
   };
+  const [scrolled, setScrolled] = useState(false);
+  useEffect(() => {
+    const on = () => setScrolled(window.scrollY > 40);
+    on(); window.addEventListener("scroll", on, { passive: true });
+    return () => window.removeEventListener("scroll", on);
+  }, []);
+  const [chartMax, setChartMax] = useState(false);
+  useEffect(() => { if (!sel) setChartMax(false); }, [sel]);
+  useEffect(() => {
+    if (!chartMax) return;
+    const k = (e: KeyboardEvent) => { if (e.key === "Escape") setChartMax(false); };
+    window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k);
+  }, [chartMax]);
   const add = (t: BlockType) => setScreen(insertBlock(screen, makeBlock(t)));
 
   return (
@@ -151,15 +164,19 @@ export default function App() {
       {wide ? (
         <div className="builder">
           <Palette onAdd={add} />
+          <button className={"scroll-hint" + (scrolled ? " gone" : "")} aria-label="Ir para os resultados" tabIndex={scrolled ? -1 : 0}
+            onClick={() => document.getElementById("resultados")?.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" })}>
+            Resultados <b className="mono">({ev.results.length})</b> <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6" /></svg>
+          </button>
           <Canvas screen={screen} counts={ev.perBlock} total={rows.length} filteredCount={ev.filtered.length} resultCount={ev.results.length} sectors={sectors} tree={tree} onChange={setScreen} step={exec.step} runId={exec.runId} />
         </div>
       ) : (
         <MobilePipeline screen={screen} counts={ev.perBlock} sectors={sectors} tree={tree} onChange={setScreen} resultCount={ev.results.length} />
       )}
 
-      <div className={"lower" + (selRow && wide ? " with-chart" : "")}>
+      <div id="resultados" className={"lower" + (selRow && wide ? " with-chart" : "")}>
         <Results runId={exec.runId} done={done} ev={ev} total={latest?.universeCount ?? 0} failed={latest?.failedTickers ?? []} selected={sel} onSelect={setSel} compact={!wide} />
-        {selRow && <div className={wide ? "side" : "fullscreen"}><ChartPanel row={selRow} hits={ev.hits.get(selRow.t) ?? []} onClose={() => setSel(null)} /></div>}
+        {selRow && <div className={wide ? "side" + (chartMax ? " maxed" : "") : "fullscreen"}><ChartPanel row={selRow} hits={ev.hits.get(selRow.t) ?? []} onClose={() => setSel(null)} maximized={chartMax} onToggleMax={wide ? () => setChartMax((m) => !m) : undefined} /></div>}
       </div>
 
       <footer className="foot">
