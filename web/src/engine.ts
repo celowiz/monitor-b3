@@ -5,13 +5,27 @@ export interface Row {
   t: string; name: string; kind: Kind; sector: string | null; subsector: string | null; logo: string | null;
   date: string; price: number; prevClose: number | null; open: number | null; chg: number | null;
   high52: number | null; low52: number | null; liq21: number | null; vol: number | null; volRatio: number | null;
-  rsi: number | null; idx?: string[]; rsiPrev: number | null; rsBench?: "IBOV" | "IFIX"; ret21: number | null; rs21: number | null;
+  rsi: number | null; idx?: string[]; rsiPrev: number | null; rsBench?: "IBOV" | "IFIX" | "SPX"; ret21: number | null; rs21: number | null;
   sma20: number | null; sma50: number | null; sma200: number | null; sma50Prev: number | null; sma200Prev: number | null;
   gap?: number | null; maxC20?: number | null; minC20?: number | null; maxC60?: number | null; minC60?: number | null;
   upStreak?: number; downStreak?: number;
 }
 
+export type Market = "br" | "us";
+// Contexto do mercado ativo (moeda, índice, opções do filtro de índice). Ajustado pelo App ao carregar os dados.
+export const MKT = { market: "br" as Market, cur: "R$", bench: "Ibov", indexOptions: [["IBOV", "Ibovespa"], ["IFIX", "IFIX"], ["SMLL", "Small Caps"]] as [string, string][] };
+export function setMarketContext(m: Market) {
+  MKT.market = m;
+  MKT.cur = m === "us" ? "US$" : "R$";
+  MKT.bench = m === "us" ? "S&P 500" : "Ibov";
+  DEFS.rs.short = m === "us" ? "RS vs S&P" : "RS vs Ibov";
+  MKT.indexOptions = m === "us" ? [["SP500", "S&P 500"]] : [["IBOV", "Ibovespa"], ["IFIX", "IFIX"], ["SMLL", "Small Caps"]];
+}
+export interface HistStat { n: number; mean?: number | null; median?: number | null; hit?: number | null; exMean?: number | null; exHit?: number | null }
+export interface SignalHistory { window: number; horizons: number[]; signals: Record<string, { events: number; tickers: number; h: Record<string, HistStat> }> }
+
 export interface Latest {
+  market?: Market; currency?: string; history?: SignalHistory;
   generatedAt: string; dataDate: string | null; delayNote: string; universeCount: number;
   failedTickers: string[]; bdrAllowlist: string[]; benchmark: { ret21: number | null; price: number | null; ifixProxy?: string; ifixRet21?: number | null };
   indexes?: Record<string, { date: string | null; count: number }>; defaults: { liq21MinBrl: number }; tickers: Row[];
@@ -134,7 +148,7 @@ export function blockSummary(b: Block): string {
     case "sma200": return `preço ${p.side === "above" ? "acima" : "abaixo"} da SMA200`;
     case "index": return p.indices?.length ? `membro de ${p.indices.join(" ou ")}` : "qualquer";
     case "liquidity": return `≥ ${fmtBrl(p.min)}`;
-    case "minPrice": return `≥ R$ ${Number(p.min).toLocaleString("pt-BR")}`;
+    case "minPrice": return `≥ ${MKT.cur} ${Number(p.min).toLocaleString("pt-BR")}`;
     case "high52": return "preço > máx. 252 pregões (ex-hoje)";
     case "low52": return "preço < mín. 252 pregões (ex-hoje)";
     case "smaCross": return { golden: "golden: 50 cruza 200 ↑ hoje", death: "death: 50 cruza 200 ↓ hoje", any: "qualquer cruzamento hoje" }[p.dir as string] ?? "";
@@ -143,7 +157,7 @@ export function blockSummary(b: Block): string {
     case "gap": return `|abertura − fech. ontem| ≥ ${p.pct}% · ${({ up: "alta", down: "baixa", both: "ambos" } as any)[p.dir]}`;
     case "range": return p.dir === "up" ? `fech. > máx. ${p.n} fech. (ex-hoje)` : p.dir === "down" ? `fech. < mín. ${p.n} fech. (ex-hoje)` : `rompe máx./mín. ${p.n} fech.`;
     case "streak": return `${p.n}+ fech. seguidos em ${p.dir === "up" ? "alta" : "baixa"}`;
-    case "rs": return `ret. 21d − índice > ${p.min} pp (Ibov; FII: IFIX)`;
+    case "rs": return MKT.market === "us" ? `ret. 21d − S&P 500 > ${p.min} pp` : `ret. 21d − índice > ${p.min} pp (Ibov; FII: IFIX)`;
   }
 }
 
@@ -172,10 +186,11 @@ export function evaluate(screen: Screen, rows: Row[]): Evaluated {
 export function fmtBrl(v: number | null | undefined): string {
   if (v == null) return "—";
   const a = Math.abs(v);
-  if (a >= 1e9) return `R$ ${(v / 1e9).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} bi`;
-  if (a >= 1e6) return `R$ ${(v / 1e6).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} mi`;
-  if (a >= 1e3) return `R$ ${(v / 1e3).toLocaleString("pt-BR", { maximumFractionDigits: 0 })} mil`;
-  return `R$ ${v.toLocaleString("pt-BR")}`;
+  const c = MKT.cur;
+  if (a >= 1e9) return `${c} ${(v / 1e9).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} bi`;
+  if (a >= 1e6) return `${c} ${(v / 1e6).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} mi`;
+  if (a >= 1e3) return `${c} ${(v / 1e3).toLocaleString("pt-BR", { maximumFractionDigits: 0 })} mil`;
+  return `${c} ${v.toLocaleString("pt-BR")}`;
 }
 export const fmtNum = (v: number | null | undefined, d = 2) =>
   v == null ? "—" : v.toLocaleString("pt-BR", { minimumFractionDigits: d, maximumFractionDigits: d });
