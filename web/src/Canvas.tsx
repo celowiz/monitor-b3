@@ -1,3 +1,4 @@
+import { track } from "./analytics";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ReactFlow, Background, Controls, MiniMap, Handle, Position, useReactFlow, ReactFlowProvider, BaseEdge, getSmoothStepPath, getBezierPath,
@@ -209,6 +210,7 @@ function Inner({ screen, counts, total, filteredCount, resultCount, sectors, tre
 }
 
 export function insertBlock(screen: Screen, b: Block): Screen {
+  track("block_add", { block_type: b.type });
   const blocks = [...screen.blocks];
   if (isFilter(b.type)) {
     const lastF = blocks.map((x) => isFilter(x.type)).lastIndexOf(true);

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createChart, createSeriesMarkers, CandlestickSeries, HistogramSeries, LineSeries, LineStyle, type IChartApi, type ISeriesMarkersPluginApi, type SeriesMarker, type Time, type UTCTimestamp } from "lightweight-charts";
 import { Block, BlockType, DEFS, KIND_LABEL, Row, SIGNAL_TYPES, fmtNum, fmtPct } from "./engine";
+import { track } from "./analytics";
 import { type Candles, type SignalEvent, SIGNAL_COLORS, historicalSignals } from "./signals";
 
 const DEFAULT_ON: BlockType[] = ["high52", "low52", "smaCross", "rsi", "gap", "volume"];
@@ -88,7 +89,7 @@ export default function ChartPanel({ row, hits, onClose, maximized = false, onTo
     }));
     markers.current.setMarkers(m);
   }, [events, on, data]);
-  const toggle = (t: BlockType) => setOn((s) => { const n = new Set(s); n.has(t) ? n.delete(t) : n.add(t); return n; });
+  const toggle = (t: BlockType) => { track("chart_signal_toggle", { signal: t, on: !on.has(t) }); setOn((s) => { const n = new Set(s); n.has(t) ? n.delete(t) : n.add(t); return n; }); };
 
   useEffect(() => {
     if (!chart.current || !data) return;

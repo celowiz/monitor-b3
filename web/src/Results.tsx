@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { downloadCsv, toCsv } from "./csv";
+import { track } from "./analytics";
 import { Block, DEFS, Evaluated, KIND_LABEL, Row, fmtBrl, fmtNum, fmtPct } from "./engine";
 
 type Col = { k: string; l: string; get: (r: Row) => number | string | null; cls?: string };
@@ -49,7 +50,7 @@ export default function Results({ runId, done, ev, total, failed, selected, onSe
       <div className="res-head">
         <h2>Resultados</h2><span className="mu">{ev.results.length} ativos · ordenado por {sortLabel}</span>
         <button className="btn sm csv" disabled={!sorted.length} title="CSV com ; e vírgula decimal (abre direto no Excel)"
-          onClick={() => downloadCsv(`monitor-b3-${new Date().toISOString().slice(0, 10)}.csv`, toCsv(sorted, (r) => (ev.hits.get(r.t) ?? []).map((h) => DEFS[h.type].short).join(" | ")))}>↓ Exportar CSV</button>
+          onClick={() => { track("csv_export", { result_count: sorted.length }); downloadCsv(`monitor-b3-${new Date().toISOString().slice(0, 10)}.csv`, toCsv(sorted, (r) => (ev.hits.get(r.t) ?? []).map((h) => DEFS[h.type].short).join(" | "))); }}>↓ Exportar CSV</button>
         {compact && (
           <select className="ed-sel" value={sort.k} onChange={(e) => setSort({ k: e.target.value, d: -1 })}>
             {COLS.slice(2).map((c) => <option key={c.k} value={c.k}>{c.l}</option>)}
