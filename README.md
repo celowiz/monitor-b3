@@ -57,4 +57,6 @@ python scripts/build_data.py --out web/public/data   # --limit 40 para universo 
 cd web && npm ci && npm run dev
 ```
 
+Workflow: `.github/workflows/scan.yml` (PRs e branches só validam e guardam o build como artefato; deploy no Pages só a partir da `main`).
+
 O `screener.py` legado (rompimento de 52s com PNGs) continua no repo para o monitor local, mas não é mais publicado no Pages.
