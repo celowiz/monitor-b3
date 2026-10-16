@@ -125,7 +125,8 @@ export function layout(blocks: Block[]) {
   const pos = new Map<string, { x: number; y: number }>();
   const filters = blocks.filter((b) => isFilter(b.type));
   const sigs = blocks.filter((b) => !isFilter(b.type));
-  const per = 5, rowH = 175, colW = 280;
+  // Uma coluna só: com duas, as arestas da 2ª coluna passavam por trás dos nós da 1ª e pareciam soltas.
+  const per = Math.max(1, sigs.length), rowH = 175, colW = 280;
   const H = Math.max(Math.min(sigs.length, per) * rowH, 300);
   filters.forEach((b, i) => pos.set(b.id, { x: i * 285, y: H / 2 - 80 }));
   const sx = filters.length * 285 + 50;
