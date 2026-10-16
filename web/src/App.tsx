@@ -5,6 +5,7 @@ import Gallery from "./Gallery";
 import { decodeScreen, encodeScreen, tokenFromHash } from "./share";
 import ChartPanel from "./Chart";
 import { BlockEditor } from "./Editors";
+import { track } from "./analytics";
 import { BlockType, DEFS, Latest, Screen, blockSummary, defaultScreen, evaluate, isFilter, loadSaved, makeBlock, storeSaved } from "./engine";
 
 const useWide = () => {
@@ -87,6 +88,7 @@ export default function App() {
   const copyLink = async () => {
     const url = `${window.location.origin}${window.location.pathname}#t=${await encodeScreen(screen)}`;
     history.replaceState(null, "", url);
+    track("share_link_copy", { preset: screen.name ?? presetIdx });
     try { await navigator.clipboard.writeText(url); flash("Link copiado. Quem abrir verá esta mesma tela."); }
     catch { window.prompt("Copie o link:", url); }
   };
@@ -123,10 +125,27 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sig]);
   const done = exec.step >= totalSteps(screen);
+  // screen_apply: uma vez por configuração, após a execução terminar e a tela ficar estável por 1,5 s.
+  useEffect(() => {
+    if (!done || !rows.length) return;
+    const t = window.setTimeout(() => {
+      const on = screen.blocks.filter((b) => b.enabled && b.type !== "universe");
+      track("screen_apply", {
+        preset: presetIdx === "builtin" ? "builtin" : (saved[Number(presetIdx)]?.name ?? screen.name ?? "custom"),
+        n_signals: on.filter((b) => !isFilter(b.type)).length,
+        n_filters: on.filter((b) => isFilter(b.type)).length,
+        combine: screen.combine,
+        result_count: ev.results.length,
+      });
+    }, 1500);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [done, sig]);
   const selRow = sel ? rows.find((r) => r.t === sel) ?? null : null;
 
   const choose = (v: string) => {
     setPresetIdx(v);
+    track("preset_select", { preset: v === "builtin" ? "builtin" : saved[Number(v)]?.name ?? v });
     if (v === "builtin") setScreen(defaultScreen(latest?.defaults?.liq21MinBrl));
     else setScreen(clone(saved[Number(v)]));
   };
@@ -195,7 +214,7 @@ export default function App() {
         <div className="builder">
           <Palette onAdd={add} />
           <button className={"scroll-hint" + (scrolled ? " gone" : "")} aria-label="Ir para os resultados" tabIndex={scrolled ? -1 : 0}
-            onClick={() => document.getElementById("resultados")?.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" })}>
+            onClick={() => { track("scroll_hint_click", { result_count: ev.results.length }); document.getElementById("resultados")?.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" }); }}>
             Resultados <b className="mono">({ev.results.length})</b> <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6" /></svg>
           </button>
           <Canvas screen={screen} counts={ev.perBlock} total={rows.length} filteredCount={ev.filtered.length} resultCount={ev.results.length} sectors={sectors} tree={tree} onChange={setScreen} step={exec.step} runId={exec.runId} />
@@ -205,12 +224,12 @@ export default function App() {
       )}
 
       <div id="resultados" className={"lower" + (selRow && wide ? " with-chart" : "")}>
-        <Results runId={exec.runId} done={done} ev={ev} total={latest?.universeCount ?? 0} failed={latest?.failedTickers ?? []} selected={sel} onSelect={setSel} compact={!wide} />
-        {selRow && <div className={wide ? "side" + (chartMax ? " maxed" : "") : "fullscreen"}><ChartPanel row={selRow} hits={ev.hits.get(selRow.t) ?? []} onClose={() => setSel(null)} maximized={chartMax} onToggleMax={wide ? () => setChartMax((m) => !m) : undefined} /></div>}
+        <Results runId={exec.runId} done={done} ev={ev} total={latest?.universeCount ?? 0} failed={latest?.failedTickers ?? []} selected={sel} onSelect={(t: string) => { if (t !== sel) { const r = rows.find((x) => x.t === t); track("ticker_open", { ticker: t, asset_type: r?.kind, sector: r?.sector ?? undefined }); } setSel(t); }} compact={!wide} />
+        {selRow && <div className={wide ? "side" + (chartMax ? " maxed" : "") : "fullscreen"}><ChartPanel row={selRow} hits={ev.hits.get(selRow.t) ?? []} onClose={() => setSel(null)} maximized={chartMax} onToggleMax={wide ? () => { if (!chartMax) track("chart_maximize", { ticker: selRow.t }); setChartMax((m) => !m); } : undefined} /></div>}
       </div>
 
       {gallery && <Gallery liqMin={latest?.defaults?.liq21MinBrl ?? 5_000_000} onClose={() => setGallery(false)}
-        onPick={(s) => { setScreen(s); setPresetIdx("gallery"); setGallery(false); flash(`Tela "${s.name}" aplicada`); history.replaceState(null, "", window.location.pathname); }} />}
+        onPick={(s) => { track("preset_select", { preset: s.name, source: "gallery" }); setScreen(s); setPresetIdx("gallery"); setGallery(false); flash(`Tela "${s.name}" aplicada`); history.replaceState(null, "", window.location.pathname); }} />}
       {toast && <div className="toast" role="status">{toast}</div>}
 
       <footer className="foot">
