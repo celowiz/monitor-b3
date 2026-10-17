@@ -23,4 +23,6 @@ export const PRESETS: Preset[] = [
     build: (l) => scr("Rompimento 20 dias", "and", [...base(l), sig("range", { n: 20, dir: "up" })]) },
   { id: "agulhada", name: "Agulhada do Didi", desc: "Criada por Odir Aguiar (Didi), observa três médias móveis curtas (3, 8 e 20 pregões). Quando elas se juntam (todas a menos de 1,5% umas das outras) o preço está \"respirando\" antes de escolher um lado; a média curta acima da longa indica compra e abaixo, venda. Muitos analistas esperam as médias se abrirem em leque para confirmar o movimento.",
     build: () => scr("Agulhada do Didi", "and", [makeBlock("universe", true, { kinds: ["acao"] }), sig("agulhada")]) },
+  { id: "trix", name: "TRIX", desc: "O TRIX é a variação percentual diária de uma média móvel exponencial aplicada três vezes (aqui, de 9 pregões), o que filtra boa parte do ruído do preço. O sinal aparece quando o TRIX cruza a sua própria média (EMA de 9) longe do normal recente: abaixo da faixa típica dos últimos 60 pregões e virando para cima indica compra; acima da faixa e virando para baixo, venda. Regra fixa, sem parâmetros.",
+    build: () => scr("TRIX", "and", [makeBlock("universe", true, { kinds: ["acao"] }), sig("trix")]) },
 ];

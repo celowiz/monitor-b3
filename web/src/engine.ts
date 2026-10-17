@@ -13,6 +13,8 @@ export interface Row {
   upStreak?: number; downStreak?: number;
   /** últimos fechamentos (o último = price), para sinais com períodos editáveis (Agulhada) */
   cl?: number[];
+  /** TRIX (regra fixa, calculado no job de dados com o histórico inteiro): +1 compra, −1 venda, 0 nada hoje */
+  trixSide?: number; trix?: number | null; trixSig?: number | null;
 }
 
 export type Market = "br" | "us";
@@ -30,6 +32,8 @@ export interface SignalHistory { window: number; horizons: number[]; signals: Re
 
 export interface Latest {
   market?: Market; currency?: string; history?: SignalHistory;
+  /** correções da série de preços (scripts/adjust.py): ticker → eventos corrigidos / quebras */
+  adjustments?: { corrected: Record<string, { date: string; kind: string; jump: number; factor: number | null; note: string }[]>; b3Issuers?: number };
   generatedAt: string; dataDate: string | null; delayNote: string; universeCount: number;
   failedTickers: string[]; bdrAllowlist: string[]; benchmark: { ret21: number | null; price: number | null; ifixProxy?: string; ifixRet21?: number | null };
   indexes?: Record<string, { date: string | null; count: number }>; defaults: { liq21MinBrl: number }; tickers: Row[];
@@ -37,7 +41,7 @@ export interface Latest {
 
 export type BlockType =
   | "universe" | "sector" | "liquidity" | "minPrice" | "chgRange" | "blocklist" | "sma200" | "index"
-  | "high52" | "low52" | "smaCross" | "volume" | "rsi" | "rs" | "gap" | "range" | "streak" | "agulhada"
+  | "high52" | "low52" | "smaCross" | "volume" | "rsi" | "rs" | "gap" | "range" | "streak" | "agulhada" | "trix"
   | "and" | "or" | "result";
 
 export interface Block {
@@ -49,7 +53,7 @@ export interface GEdge { id: string; source: string; target: string }
 export interface Screen { name: string; blocks: Block[]; edges: GEdge[]; combine?: "and" | "or"; builtin?: boolean }
 
 export const FILTER_TYPES: BlockType[] = ["universe", "sector", "liquidity", "minPrice", "chgRange", "blocklist", "sma200", "index"];
-export const SIGNAL_TYPES: BlockType[] = ["high52", "low52", "smaCross", "volume", "rsi", "rs", "gap", "range", "streak", "agulhada"];
+export const SIGNAL_TYPES: BlockType[] = ["high52", "low52", "smaCross", "volume", "rsi", "rs", "gap", "range", "streak", "agulhada", "trix"];
 export const LOGIC_TYPES: BlockType[] = ["and", "or"];
 export const isFilter = (t: BlockType) => FILTER_TYPES.includes(t);
 export const isSignal = (t: BlockType) => SIGNAL_TYPES.includes(t);
@@ -79,6 +83,7 @@ export const DEFS: Record<BlockType, BlockDef> = {
   or: { label: "OU (qualquer)", icon: "OU", group: "Lógica", short: "OU", defaults: {} },
   result: { label: "Resultado", icon: "●", group: "Saída", short: "Resultado", defaults: {} },
   agulhada: { label: "Agulhada do Didi", icon: "⋈", group: "Sinais", short: "Agulhada", defaults: { ...AGU_DEFAULTS } },
+  trix: { label: "TRIX", icon: "≋", group: "Sinais", short: "TRIX", defaults: {} },
   streak: { label: "Sequência de altas/baixas", icon: "⋰", group: "Sinais", short: "Sequência", defaults: { n: 3, dir: "up" } },
 };
 
@@ -148,6 +153,7 @@ export function signalHit(b: Block, r: Row): boolean {
       return p.dir === "up" ? upHit : p.dir === "down" ? dnHit : upHit || dnHit;
     }
     case "agulhada": return agulhadaHit(r.cl, p) != null;
+    case "trix": return r.trixSide === 1 || r.trixSide === -1;
     case "streak": return (p.dir === "up" ? r.upStreak ?? 0 : r.downStreak ?? 0) >= Number(p.n);
   }
   return false;
@@ -177,11 +183,18 @@ export function blockSummary(b: Block): string {
       const w = Number(p.window) > 1 ? `últimos ${p.window} preg.` : "hoje";
       return `SMA ${p.curta}/${p.media}/${p.longa} · conv. < ${String(p.alpha).replace(".", ",")}% · ${d} · ${w}${p.fresh ? " · 1º dia" : ""}${p.confirm ? ` · abertura ≤ ${p.confirmN}d` : ""}`;
     }
+    case "trix": return "TRIX(9) cruza sinal EMA 9 fora da banda 60d · compra ou venda · hoje";
     case "and": return "todas as entradas (interseção)";
     case "or": return "qualquer entrada (união)";
     case "result": return "ativos que chegam aqui";
     case "rs": return MKT.market === "us" ? `ret. 21d − S&P 500 > ${p.min} pp` : `ret. 21d − índice > ${p.min} pp (Ibov; FII: IFIX)`;
   }
+}
+
+/** Rótulo curto do sinal para um ativo, com o lado quando o sinal tem lado (TRIX ▲/▼). */
+export function hitLabel(b: Block, r?: Row): string {
+  if (b.type === "trix" && r?.trixSide) return `TRIX ${r.trixSide > 0 ? "▲" : "▼"}`;
+  return DEFS[b.type].short;
 }
 
 export interface Evaluated {

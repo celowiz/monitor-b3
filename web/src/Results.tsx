@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { downloadCsv, toCsv } from "./csv";
 import { track } from "./analytics";
-import { Block, DEFS, Evaluated, KIND_LABEL, Row, fmtBrl, fmtNum, fmtPct } from "./engine";
+import { Block, DEFS, Evaluated, KIND_LABEL, Row, fmtBrl, fmtNum, fmtPct, hitLabel } from "./engine";
 
 type Col = { k: string; l: string; get: (r: Row) => number | string | null; cls?: string };
 const dist200 = (r: Row) => (r.sma200 ? r.price / r.sma200 - 1 : null);
@@ -32,9 +32,9 @@ export function useSorted(rows: Row[]) {
 const Logo = ({ r }: { r: Row }) => (
   <span className="logo sm">{r.logo ? <img src={r.logo} alt="" loading="lazy" onError={(e) => ((e.target as HTMLImageElement).style.display = "none")} /> : null}<span>{r.t.slice(0, 2)}</span></span>
 );
-const Badges = ({ hits }: { hits?: Block[] }) => {
+const Badges = ({ hits, r }: { hits?: Block[]; r?: Row }) => {
   if (!hits?.length) return <span className="mu">—</span>;
-  return <>{hits.slice(0, 2).map((h) => <span key={h.id} className="bdg">{DEFS[h.type].short}</span>)}{hits.length > 2 && <span className="bdg amb">+{hits.length - 2}</span>}</>;
+  return <>{hits.slice(0, 2).map((h) => <span key={h.id} className={"bdg" + (h.type === "trix" && r?.trixSide ? (r.trixSide > 0 ? " side-up" : " side-dn") : "")}>{hitLabel(h, r)}</span>)}{hits.length > 2 && <span className="bdg amb">+{hits.length - 2}</span>}</>;
 };
 const cls = (v: number | null | undefined) => (v == null ? "" : v >= 0 ? "up" : "dn");
 
@@ -50,7 +50,7 @@ export default function Results({ runId, done, ev, total, failed, selected, onSe
       <div className="res-head">
         <h2>Resultados</h2><span className="mu">{ev.results.length} ativos · ordenado por {sortLabel}</span>
         <button className="btn sm csv" disabled={!sorted.length} title="CSV com ; e vírgula decimal (abre direto no Excel)"
-          onClick={() => { track("csv_export", { result_count: sorted.length }); downloadCsv(`monitor-b3-${new Date().toISOString().slice(0, 10)}.csv`, toCsv(sorted, (r) => (ev.hits.get(r.t) ?? []).map((h) => DEFS[h.type].short).join(" | "))); }}>↓ Exportar CSV</button>
+          onClick={() => { track("csv_export", { result_count: sorted.length }); downloadCsv(`monitor-b3-${new Date().toISOString().slice(0, 10)}.csv`, toCsv(sorted, (r) => (ev.hits.get(r.t) ?? []).map((h) => hitLabel(h, r)).join(" | "))); }}>↓ Exportar CSV</button>
         {compact && (
           <select className="ed-sel" value={sort.k} onChange={(e) => setSort({ k: e.target.value, d: -1 })}>
             {COLS.slice(2).map((c) => <option key={c.k} value={c.k}>{c.l}</option>)}
@@ -70,7 +70,7 @@ export default function Results({ runId, done, ev, total, failed, selected, onSe
           {shown.map((r, i) => (
             <button key={r.t} style={rv(i)} className={"card" + (selected === r.t ? " sel" : "")} onClick={() => onSelect(r.t)}>
               <Logo r={r} />
-              <div className="c-id"><b>{r.t}</b><span>{r.name}</span><div className="badges"><Badges hits={ev.hits.get(r.t)} /></div></div>
+              <div className="c-id"><b>{r.t}</b><span>{r.name}</span><div className="badges"><Badges hits={ev.hits.get(r.t)} r={r} /></div></div>
               <div className="c-num mono"><b>{fmtNum(r.price)}</b><span className={cls(r.chg)}>{fmtPct(r.chg)}</span><span className="mu">RSI {fmtNum(r.rsi, 1)}</span></div>
             </button>
           ))}
@@ -100,7 +100,7 @@ export default function Results({ runId, done, ev, total, failed, selected, onSe
                     <td className={"num mono " + cls(d)}>{fmtPct(d)}</td>
                     <td className="num mono">{fmtNum(r.rsi, 1)}</td>
                     <td className={"num mono " + cls(r.rs21)}>{r.rs21 == null ? "—" : `${r.rs21 >= 0 ? "+" : ""}${fmtNum(r.rs21, 1)} pp`}</td>
-                    <td><div className="badges"><Badges hits={ev.hits.get(r.t)} /></div></td>
+                    <td><div className="badges"><Badges hits={ev.hits.get(r.t)} r={r} /></div></td>
                   </tr>
                 );
               })}

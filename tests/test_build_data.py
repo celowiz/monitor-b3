@@ -26,6 +26,17 @@ class IndicatorTests(unittest.TestCase):
         self.assertAlmostEqual(ind["cl"][-1], ind["price"], places=2)
         self.assertEqual(ind["cl"][0], float(f"{closes[-bd.AGU_CLOSES]:.4g}"))
 
+    def test_trix_fields(self):
+        import numpy as np
+        rng = np.random.default_rng(4)
+        closes = list(100 * np.cumprod(1 + rng.normal(0, 0.02, 300)))
+        ind = bd.indicators(self.frame(closes), 0.0)
+        self.assertIn(ind["trixSide"], (-1, 0, 1))
+        self.assertIsNotNone(ind["trix"])
+        cp = bd.candles_payload(self.frame(closes))
+        self.assertEqual(len(cp["trix"]), len(cp["t"]))
+        self.assertEqual(cp["trixSide"][-1], ind["trixSide"])
+
     def test_rsi_bounds(self):
         ind = bd.indicators(self.frame([10 + (i % 5) for i in range(300)]), 0.0)
         self.assertTrue(0 <= ind["rsi"] <= 100)
