@@ -6,12 +6,14 @@ export interface Candles {
   t: string[]; o: number[]; h: number[]; l: number[]; c: number[]; v: number[];
   sma50: (number | null)[]; sma200: (number | null)[]; high52: (number | null)[];
   low52?: (number | null)[]; rsi?: (number | null)[]; volr?: (number | null)[]; rs21?: (number | null)[];
+  /** TRIX(9), sinal EMA 9, banda (±) e lado do sinal (+1/−1/0), calculados no job de dados */
+  trix?: (number | null)[]; trixSig?: (number | null)[]; trixBand?: (number | null)[]; trixSide?: number[];
 }
 export interface SignalEvent { i: number; t: string; type: BlockType; text: string; up: boolean }
 
 export const SIGNAL_COLORS: Record<string, string> = {
   high52: "#3fb8a9", low52: "#e06c6c", smaCross: "#d6a756", volume: "#9aa4ad", rsi: "#b58cf0",
-  rs: "#5aa9e6", gap: "#e69a5a", range: "#7fd1c4", streak: "#c9c26a", agulhada: "#f2d16b",
+  rs: "#5aa9e6", gap: "#e69a5a", range: "#7fd1c4", streak: "#c9c26a", agulhada: "#f2d16b", trix: "#e88fc0",
 };
 
 const nn = (x: number | null | undefined): x is number => x != null && Number.isFinite(x);
@@ -53,6 +55,10 @@ export function historicalSignals(d: Candles, params: Partial<Record<BlockType, 
   // para não pintar um marcador por pregão enquanto as médias seguem juntas.
   { const p = normParams(P("agulhada")), s = agulhadaSeries(d.c, { ...p, fresh: true });
     for (const e of agulhadaFilterEvents(s, p)) push(e.i, "agulhada", `Agulhada ${e.up ? "compra ▲" : "venda ▼"}${e.confirmed ? " (abertura confirmada)" : ""}`, e.up); }
+  // TRIX: lado vem pronto do job de dados (regra fixa). A condição costuma valer por vários pregões seguidos;
+  // marcamos só o 1º dia de cada sequência (como a Agulhada). dir só é usado nas estatísticas por ativo (HIST_PARAMS).
+  if (d.trixSide) { const dir = P("trix").dir;
+    d.trixSide.forEach((s, i) => { if (s && s !== d.trixSide![i - 1] && (dir !== "buy" || s > 0) && (dir !== "sell" || s < 0)) push(i, "trix", `TRIX ${s > 0 ? "compra ▲" : "venda ▼"}`, s > 0); }); }
   return out.sort((a, b) => a.i - b.i);
 }
 
@@ -109,9 +115,11 @@ export function squarify<T extends { liq: number }>(items: T[], W: number, H: nu
 export const HIST_PARAMS: Partial<Record<BlockType, Record<string, any>>> = {
   smaCross: { dir: "golden" }, volume: { mult: 2 }, rsi: { zone: "below", low: 30 }, rs: { min: 0 },
   gap: { pct: 2, dir: "up" }, range: { n: 20, dir: "up" }, streak: { n: 3, dir: "up" },
-  agulhada: { dir: "buy", fresh: true },
+  agulhada: { dir: "buy", fresh: true }, trix: { dir: "buy" },
 };
 export const HORIZONS = [5, 21, 63];
+/** mesmo filtro de erro de dados do job (scripts/history.py) */
+export const RET_MIN = -0.95, RET_MAX = 3;
 export interface FwdStat { n: number; mean: number | null; median: number | null; hit: number | null; exMean: number | null; exHit: number | null }
 const med = (a: number[]) => { if (!a.length) return null; const s = [...a].sort((x, y) => x - y), m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
 const mean = (a: number[]) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : null);
@@ -124,7 +132,7 @@ export function fwdStats(d: Candles & { bc?: (number | null)[] }, events: Signal
       const r: number[] = [], ex: number[] = [];
       for (const e of ev) {
         const j = e.i + hz; if (j >= d.c.length) continue;
-        const x = d.c[j] / d.c[e.i] - 1; r.push(x);
+        const x = d.c[j] / d.c[e.i] - 1; if (!(x > RET_MIN && x < RET_MAX)) continue; r.push(x);
         const b0 = d.bc?.[e.i], b1 = d.bc?.[j];
         if (nn(b0) && nn(b1)) ex.push(x - (b1 / b0 - 1));
       }

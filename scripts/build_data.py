@@ -312,6 +312,12 @@ def indicators(df: pd.DataFrame, bench_ret21: float | None) -> dict:
     # últimos AGU_CLOSES fechamentos (4 algarismos significativos): o navegador calcula a Agulhada do Didi
     # com períodos editáveis (web/src/agulhada.ts) sem baixar os candles de cada ativo.
     out["cl"] = [float(f"{x:.4g}") for x in c.tail(AGU_CLOSES)]
+    # TRIX (regra fixa, sem parâmetros no bloco): calculado aqui com o histórico inteiro (EMAs dependem do passado
+    # todo), então a triagem só precisa do lado de hoje (+1 compra, −1 venda, 0 nada) e do valor atual.
+    tx = history.trix_frame(c)
+    out["trixSide"] = int(tx["side"].iloc[-1])
+    out["trix"] = r(tx["trix"].iloc[-1], 4)
+    out["trixSig"] = r(tx["sig"].iloc[-1], 4)
     out["sma50Prev"] = r(sma[50].iloc[-2]) if n > 1 else None
     out["sma200Prev"] = r(sma[200].iloc[-2]) if n > 1 else None
     return out
@@ -334,9 +340,14 @@ def candles_payload(df: pd.DataFrame, bench_close: pd.Series | None = None) -> d
         rs = (ret21 - (b / b.shift(21) - 1)) * 100
     else:
         rs = pd.Series(float("nan"), index=c.index)
+    tx = history.trix_frame(c)
     t = df.tail(CHART_BARS)
     idx = t.index
     return {
+        "trix": [r(x, 4) for x in tx["trix"].loc[idx]],
+        "trixSig": [r(x, 4) for x in tx["sig"].loc[idx]],
+        "trixBand": [r(x, 4) for x in tx["band"].loc[idx]],
+        "trixSide": [int(x) for x in tx["side"].loc[idx]],
         "t": [d.strftime("%Y-%m-%d") for d in idx],
         "o": [r(x, 3) for x in t["Open"]],
         "h": [r(x, 3) for x in t["High"]],
