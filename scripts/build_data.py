@@ -7,7 +7,9 @@ Saída (em --out, normalmente site/data):
   candles/<T>.json, candles_us/<T>.json  ~1 ano de candles + séries do gráfico (sob demanda)
 
 Fontes: brapi.dev (universo + metadados, cache em data/ticker_meta.json) e
-yfinance (OHLCV diário, auto_adjust=True em tudo, incluindo ^BVSP).
+yfinance (OHLCV diário bruto + proventos) e B3 (eventos de ações: grupamentos/desdobramentos/bonificações).
+Preços: série total-return reconstruída em scripts/adjust.py (proventos + eventos, com correção de eventos que o
+Yahoo deixou sem ajustar); gráficos, sinais e histórico usam essa série.
 Conteúdo educativo, não é recomendação de investimento.
 """
 from __future__ import annotations
@@ -28,6 +30,7 @@ import requests
 import yfinance as yf
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import adjust  # noqa: E402
 import history  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -219,7 +222,17 @@ def build_universe(cfg: dict, limit: int | None) -> tuple[list[str], dict[str, d
     return tickers, store
 
 
-def download(symbols: list[str], period: str, chunk: int) -> tuple[dict[str, pd.DataFrame], list[str]]:
+def download(symbols: list[str], period: str, chunk: int, retry: bool = True) -> tuple[dict[str, pd.DataFrame], list[str]]:
+    frames, failed = _download(symbols, period, chunk)
+    if failed and retry:  # o Yahoo devolve "possibly delisted" de forma intermitente: 2ª tentativa só para as falhas
+        time.sleep(3)
+        log.info("yfinance: nova tentativa para %d falhas", len(failed))
+        more, failed = _download(failed, period, max(5, chunk // 4))
+        frames.update(more)
+    return frames, failed
+
+
+def _download(symbols: list[str], period: str, chunk: int) -> tuple[dict[str, pd.DataFrame], list[str]]:
     frames: dict[str, pd.DataFrame] = {}
     failed: list[str] = []
     for i in range(0, len(symbols), chunk):
@@ -228,7 +241,9 @@ def download(symbols: list[str], period: str, chunk: int) -> tuple[dict[str, pd.
         raw = None
         for attempt in range(3):
             try:
-                raw = yf.download(tickers=part, period=period, interval="1d", auto_adjust=True,
+                # bruto + proventos: o ajuste total-return é refeito em adjust.clean (o auto_adjust do Yahoo
+                # herda erros de escala de preço e eventos não ajustados)
+                raw = yf.download(tickers=part, period=period, interval="1d", auto_adjust=False, actions=True,
                                   group_by="ticker", threads=True, progress=False)
                 break
             except Exception as e:
@@ -400,6 +415,17 @@ def main() -> int:
         ysym = lambda t: f"{t}.SA"  # noqa: E731
     log.info("[%s] universo: %d tickers", args.market, len(tickers))
     frames, failed = download(syms, yc.get("period_panel", "2y"), int(yc.get("chunk_size", 40)))
+    b3_events = {} if us else adjust.fetch_b3_events(tickers, ROOT / ".cache" / "b3_events.json")
+    adj_reports: dict[str, adjust.Report] = {}
+    for sym in list(frames):
+        if sym.startswith("^"):  # índices: sem proventos/eventos
+            frames[sym] = frames[sym].drop(columns=[x for x in ("Adj Close", "Dividends", "Stock Splits", "Capital Gains") if x in frames[sym]])
+            continue
+        t_ = sym.replace(".SA", "")
+        frames[sym], adj_reports[t_] = adjust.clean(frames[sym], b3_events.get(t_))
+    corrected = {t_: [f.__dict__ for f in rep.fixes if f.kind != "big_move"] for t_, rep in adj_reports.items() if rep.corrected or rep.breaks}
+    log.info("ajuste: %d tickers corrigidos, %d com quebra não explicada", sum(r.corrected for r in adj_reports.values()),
+             sum(bool(r.breaks) for r in adj_reports.values()))
 
     def ret21_of(sym):
         b = frames.get(sym) if sym else None
@@ -436,12 +462,17 @@ def main() -> int:
         rows.append({"t": t, "name": m.get("name") or t, "kind": kind,
                      "sector": m.get("sector"), "subsector": m.get("subsector"),
                      "logo": m.get("logoUrl"), "idx": [ix for ix in membership if t in membership[ix]], **ind})
-        (cdir / f"{t}.json").write_text(json.dumps(candles_payload(df, bc["Close"] if bc is not None else None), separators=(",", ":")))
+        brk = adj_reports.get(t).breaks if adj_reports.get(t) else []
+        (cdir / f"{t}.json").write_text(json.dumps({**candles_payload(df, bc["Close"] if bc is not None else None), "brk": brk}, separators=(",", ":")))
         hist_frames[t] = df
         hist_bench[t] = bc["Close"] if bc is not None else None
 
     t0 = time.time()
-    hist = history.summarize(history.collect(hist_frames, bench["Close"] if bench is not None else None, hist_bench))
+    # janelas que atravessam uma quebra não explicada ficam fora: 252 pregões depois (indicadores contaminados)
+    # e 63 antes (retorno futuro contaminado)
+    excl = {t_: adjust.break_mask(hist_frames[t_].index, rep.breaks, before=LOOKBACK, after=max(history.HORIZONS))
+            for t_, rep in adj_reports.items() if rep.breaks and t_ in hist_frames}
+    hist = history.summarize(history.collect(hist_frames, bench["Close"] if bench is not None else None, hist_bench, excl))
     log.info("histórico de sinais: %.1fs", time.time() - t0)
 
     last_dates = sorted({x["date"] for x in rows})
@@ -453,9 +484,11 @@ def main() -> int:
         "generatedAt": run_at.isoformat(timespec="seconds"),
         "dataDate": last_dates[-1] if last_dates else None,
         "sources": ({"universe": "Wikipedia: List of S&P 500 companies (cache em data/sp500.json)",
-                     "prices": "yfinance diário, auto_adjust=True", "benchmark": "^GSPC"} if us else
+                     "prices": "yfinance diário bruto + proventos; total-return refeito em adjust.py", "benchmark": "^GSPC"} if us else
                     {"universe": "brapi.dev (tier gratuito, cache em data/ticker_meta.json)",
-                     "prices": "yfinance diário, auto_adjust=True", "benchmark": "^BVSP"}),
+                     "prices": "yfinance diário bruto + proventos; eventos B3 (sistemaswebb3-listados); total-return refeito em adjust.py",
+                     "benchmark": "^BVSP"}),
+        "adjustments": {"corrected": corrected, "b3Issuers": len({t_[:4] for t_ in b3_events}) if b3_events else 0},
         "delayNote": "até ~30 min (GitHub Actions) + atraso do Yahoo; barra de hoje é provisória durante o pregão",
         "lookback52": LOOKBACK,
         "defaults": {"liq21MinBrl": liq_default},

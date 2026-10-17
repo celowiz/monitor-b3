@@ -8,6 +8,8 @@ export interface Candles {
   low52?: (number | null)[]; rsi?: (number | null)[]; volr?: (number | null)[]; rs21?: (number | null)[];
   /** TRIX(9), sinal EMA 9, banda (±) e lado do sinal (+1/−1/0), calculados no job de dados */
   trix?: (number | null)[]; trixSig?: (number | null)[]; trixBand?: (number | null)[]; trixSide?: number[];
+  /** datas de quebras não explicadas da série (ver scripts/adjust.py) */
+  brk?: string[];
 }
 export interface SignalEvent { i: number; t: string; type: BlockType; text: string; up: boolean }
 
@@ -118,13 +120,14 @@ export const HIST_PARAMS: Partial<Record<BlockType, Record<string, any>>> = {
   agulhada: { dir: "buy", fresh: true }, trix: { dir: "buy" },
 };
 export const HORIZONS = [5, 21, 63];
-/** mesmo filtro de erro de dados do job (scripts/history.py) */
-export const RET_MIN = -0.95, RET_MAX = 3;
+/** pregões de "quebra não explicada" na série (scripts/adjust.py); janelas que as atravessam ficam fora das estatísticas */
+const BRK_BEFORE = 252;
 export interface FwdStat { n: number; mean: number | null; median: number | null; hit: number | null; exMean: number | null; exHit: number | null }
 const med = (a: number[]) => { if (!a.length) return null; const s = [...a].sort((x, y) => x - y), m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
 const mean = (a: number[]) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : null);
 export function fwdStats(d: Candles & { bc?: (number | null)[] }, events: SignalEvent[]): Record<string, Record<number, FwdStat> & { events: number }> {
   const out: Record<string, any> = {};
+  const brk = (d.brk ?? []).map((x) => d.t.indexOf(x) >= 0 ? d.t.indexOf(x) : d.t.findIndex((t) => t > x)).filter((i) => i >= 0);
   for (const t of ALL_SIGNALS) {
     const ev = events.filter((e) => e.type === t);
     const row: any = { events: ev.length };
@@ -132,7 +135,8 @@ export function fwdStats(d: Candles & { bc?: (number | null)[] }, events: Signal
       const r: number[] = [], ex: number[] = [];
       for (const e of ev) {
         const j = e.i + hz; if (j >= d.c.length) continue;
-        const x = d.c[j] / d.c[e.i] - 1; if (!(x > RET_MIN && x < RET_MAX)) continue; r.push(x);
+        if (brk.some((b) => b > e.i - BRK_BEFORE && b <= j)) continue;
+        const x = d.c[j] / d.c[e.i] - 1; r.push(x);
         const b0 = d.bc?.[e.i], b1 = d.bc?.[j];
         if (nn(b0) && nn(b1)) ex.push(x - (b1 / b0 - 1));
       }

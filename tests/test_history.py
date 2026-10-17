@@ -50,12 +50,16 @@ class TrixAgulhadaTests(unittest.TestCase):
         self.assertGreater(out["trix_buy"]["events"] + out["trix_sell"]["events"], 0)
 
 
-class DataErrorFilterTests(unittest.TestCase):
-    def test_absurd_forward_return_dropped(self):
+class ExcludeMaskTests(unittest.TestCase):
+    def test_no_value_filter_and_exclude_mask(self):
         c = pd.Series([1.0] * 10 + [5000.0] * 10)
-        r5 = hi.forward_returns(c)[5]
-        self.assertTrue(r5.iloc[5:10].isna().all())   # salto de 5000× = erro de dados
-        self.assertEqual(float(r5.iloc[0]), 0.0)
+        self.assertAlmostEqual(float(hi.forward_returns(c)[5].iloc[5]), 4999.0)  # sem filtro de valor
+        rng = np.random.default_rng(3)
+        df = frame(list(100 * np.cumprod(1 + rng.normal(0, 0.02, 400))))
+        full = hi.collect({"X": df}, None)
+        mask = pd.Series(False, index=df.index); mask.iloc[-100:] = True
+        part = hi.collect({"X": df}, None, exclude={"X": mask})
+        self.assertEqual(len(part["base"][5]), len(full["base"][5]) - 100 + 5)
 
 
 class HistoryTests(unittest.TestCase):

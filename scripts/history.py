@@ -101,22 +101,17 @@ def signal_frame(df: pd.DataFrame, bench_close: pd.Series | None, lookback: int 
     return out.fillna(False).astype(bool)
 
 
-# Retornos futuros fora de (−95%, +300%) são tratados como erro de dados (ex.: grupamento não ajustado no Yahoo,
-# como AZUL3 e XPML11 nesta janela) e descartados, tanto nos sinais quanto na base.
-RET_MIN, RET_MAX = -0.95, 3.0
-
-
 def forward_returns(close: pd.Series) -> dict[int, pd.Series]:
-    out = {}
-    for hz in HORIZONS:
-        r = close.shift(-hz) / close - 1
-        out[hz] = r.where((r > RET_MIN) & (r < RET_MAX))
-    return out
+    """Retorno futuro sobre a série já ajustada (total-return, eventos corrigidos em adjust.py). Sem filtro de valor."""
+    return {hz: close.shift(-hz) / close - 1 for hz in HORIZONS}
 
 
 def collect(frames: dict[str, pd.DataFrame], bench_close: pd.Series | None,
-            bench_for: dict[str, pd.Series | None] | None = None) -> dict[str, dict[int, list[tuple[float, float | None]]]]:
-    """frames: ticker -> OHLCV. Retorna sig -> h -> [(ret, excesso vs benchmark)]; também conta eventos."""
+            bench_for: dict[str, pd.Series | None] | None = None,
+            exclude: dict[str, pd.Series] | None = None) -> dict[str, dict[int, list[tuple[float, float | None]]]]:
+    """frames: ticker -> OHLCV. Retorna sig -> h -> [(ret, excesso vs benchmark)]; também conta eventos.
+    exclude: ticker -> máscara (True = pregão fora do estudo, ex.: janela que atravessa uma quebra não explicada
+    da série; ver adjust.break_mask). Vale para sinais e base."""
     acc = {s: {hz: [] for hz in HORIZONS} for s in SIGNALS}
     base = {hz: [] for hz in HORIZONS}
     counts = {s: 0 for s in SIGNALS}
@@ -127,6 +122,8 @@ def collect(frames: dict[str, pd.DataFrame], bench_close: pd.Series | None,
             continue
         bc = (bench_for or {}).get(t, bench_close)
         sf = signal_frame(df, bc).tail(WINDOW)
+        if exclude and t in exclude:
+            sf = sf[~exclude[t].reindex(sf.index).fillna(False).astype(bool)]
         fw = forward_returns(df["Close"])
         # benchmark sem filtro (índices não sofrem do problema)
         bfw = None

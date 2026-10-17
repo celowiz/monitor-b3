@@ -45,7 +45,7 @@ jobs:
           cache: pip
       - run: pip install -r requirements.txt
       - name: Unit tests (indicadores + screener legado)
-        run: python -m unittest tests.test_build_data tests.test_history tests.test_screener_chart tests.test_screener_filters -v
+        run: python -m unittest tests.test_build_data tests.test_history tests.test_adjust tests.test_screener_chart tests.test_screener_filters -v
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
@@ -86,7 +86,16 @@ jobs:
         run: pip install -r requirements.txt
       - name: Unit tests
         if: steps.cal.outputs.skip != 'true'
-        run: python -m unittest tests.test_b3_calendar tests.test_nyse_calendar tests.test_build_data tests.test_history -v
+        run: python -m unittest tests.test_b3_calendar tests.test_nyse_calendar tests.test_build_data tests.test_history tests.test_adjust -v
+
+      # Eventos de ações da B3 (grupamentos/desdobramentos), por emissor, renovados a cada ~20 h (scripts/adjust.py).
+      - name: Cache eventos B3
+        if: steps.cal.outputs.skip != 'true'
+        uses: actions/cache@v4
+        with:
+          path: .cache/b3_events.json
+          key: b3-events-${{ github.run_id }}
+          restore-keys: b3-events-
 
       # BR e US em paralelo (downloads independentes). Falha no BR aborta; falha no US só
       # deixa o seletor US indisponível no app.

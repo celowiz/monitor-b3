@@ -56,9 +56,10 @@ describe("Histórico — Agulhada e TRIX separados por lado", () => {
     expect(k).toContain("trix_buy"); expect(k).toContain("trix_sell");
     expect(k).not.toContain("trix"); expect(k).toContain("high52");
   });
-  it("descarta retornos absurdos (erro de dados)", () => {
+  it("sem filtro de valor; janela que atravessa quebra não explicada fica fora", () => {
     const d = mk([1, 1, 1, 1, 1, 1, 5000, 5000, 5000, 5000, 5000, 5000], Array(12).fill(0));
-    const st = fwdStats(d, [{ i: 1, t: d.t[1], type: "trix", text: "", up: true }]);
-    expect(st.trix[5].n).toBe(0);
+    const ev = [{ i: 1, t: d.t[1], type: "trix" as const, text: "", up: true }];
+    expect(fwdStats(d, ev).trix[5].mean).toBeCloseTo(4999);
+    expect(fwdStats({ ...d, brk: [d.t[6]] }, ev).trix[5].n).toBe(0);
   });
 });
