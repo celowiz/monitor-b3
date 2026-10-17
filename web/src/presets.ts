@@ -21,4 +21,6 @@ export const PRESETS: Preset[] = [
     build: (l) => scr("Gap de alta com volume", "and", [...base(l), sig("gap", { pct: 2, dir: "up" }), sig("volume", { mult: 2 })]) },
   { id: "range20", name: "Rompimento 20 dias", desc: "Preço acima do maior fechamento dos últimos 20 pregões. É a versão de curto prazo do rompimento de máxima, usada em sistemas de tendência como os de Donchian.",
     build: (l) => scr("Rompimento 20 dias", "and", [...base(l), sig("range", { n: 20, dir: "up" })]) },
+  { id: "agulhada", name: "Agulhada do Didi", desc: "Criada por Odir Aguiar (Didi), observa três médias móveis curtas (3, 8 e 20 pregões). Quando elas se juntam (todas a menos de 1,5% umas das outras) o preço está \"respirando\" antes de escolher um lado; a média curta acima da longa indica compra e abaixo, venda. Muitos analistas esperam as médias se abrirem em leque para confirmar o movimento.",
+    build: () => scr("Agulhada do Didi", "and", [makeBlock("universe", true, { kinds: ["acao"] }), sig("agulhada")]) },
 ];

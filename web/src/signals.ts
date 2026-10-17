@@ -1,5 +1,6 @@
 // Sinais históricos a partir dos candles (~1 ano) — mesma lógica de engine.signalHit, aplicada barra a barra.
 import { BlockType, DEFS, SIGNAL_TYPES } from "./engine";
+import { agulhadaFilterEvents, agulhadaSeries, normParams } from "./agulhada";
 
 export interface Candles {
   t: string[]; o: number[]; h: number[]; l: number[]; c: number[]; v: number[];
@@ -10,7 +11,7 @@ export interface SignalEvent { i: number; t: string; type: BlockType; text: stri
 
 export const SIGNAL_COLORS: Record<string, string> = {
   high52: "#3fb8a9", low52: "#e06c6c", smaCross: "#d6a756", volume: "#9aa4ad", rsi: "#b58cf0",
-  rs: "#5aa9e6", gap: "#e69a5a", range: "#7fd1c4", streak: "#c9c26a",
+  rs: "#5aa9e6", gap: "#e69a5a", range: "#7fd1c4", streak: "#c9c26a", agulhada: "#f2d16b",
 };
 
 const nn = (x: number | null | undefined): x is number => x != null && Number.isFinite(x);
@@ -48,7 +49,11 @@ export function historicalSignals(d: Candles, params: Partial<Record<BlockType, 
       if (i >= N) { let k = 0; for (let j = i; j > 0 && (p.dir === "up" ? d.c[j] > d.c[j - 1] : d.c[j] < d.c[j - 1]); j--) k++;
         if (k === N) push(i, "streak", `${N} ${p.dir === "up" ? "altas" : "baixas"} seguidas`, p.dir === "up"); } }
   }
-  return out;
+  // Marcadores: 1º dia de cada convergência (ou dia da abertura confirmada), independentemente de "só 1º dia",
+  // para não pintar um marcador por pregão enquanto as médias seguem juntas.
+  { const p = normParams(P("agulhada")), s = agulhadaSeries(d.c, { ...p, fresh: true });
+    for (const e of agulhadaFilterEvents(s, p)) push(e.i, "agulhada", `Agulhada ${e.up ? "compra ▲" : "venda ▼"}${e.confirmed ? " (abertura confirmada)" : ""}`, e.up); }
+  return out.sort((a, b) => a.i - b.i);
 }
 
 export const ALL_SIGNALS = SIGNAL_TYPES;
@@ -104,6 +109,7 @@ export function squarify<T extends { liq: number }>(items: T[], W: number, H: nu
 export const HIST_PARAMS: Partial<Record<BlockType, Record<string, any>>> = {
   smaCross: { dir: "golden" }, volume: { mult: 2 }, rsi: { zone: "below", low: 30 }, rs: { min: 0 },
   gap: { pct: 2, dir: "up" }, range: { n: 20, dir: "up" }, streak: { n: 3, dir: "up" },
+  agulhada: { dir: "buy", fresh: true },
 };
 export const HORIZONS = [5, 21, 63];
 export interface FwdStat { n: number; mean: number | null; median: number | null; hit: number | null; exMean: number | null; exHit: number | null }
