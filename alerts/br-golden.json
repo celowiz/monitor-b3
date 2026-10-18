@@ -1,0 +1,77 @@
+{
+  "app": "monitor-b3",
+  "v": 2,
+  "id": "br-golden",
+  "name": "Golden cross recente",
+  "market": "br",
+  "active": true,
+  "desc": "A média de 50 dias cruzou para cima a de 200 dias no último pregão. É um indicador clássico, porém atrasado: confirma tendências que já começaram.",
+  "screen": {
+    "name": "Golden cross recente",
+    "blocks": [
+      {
+        "id": "universe-mvdwg70q-9",
+        "type": "universe",
+        "enabled": true,
+        "params": {
+          "kinds": [
+            "acao",
+            "bdr"
+          ]
+        }
+      },
+      {
+        "id": "liquidity-mvdwg70q-a",
+        "type": "liquidity",
+        "enabled": true,
+        "params": {
+          "min": 5000000
+        }
+      },
+      {
+        "id": "minPrice-mvdwg70q-b",
+        "type": "minPrice",
+        "enabled": true,
+        "params": {
+          "min": 1
+        }
+      },
+      {
+        "id": "smaCross-mvdwg70q-c",
+        "type": "smaCross",
+        "enabled": true,
+        "params": {
+          "dir": "golden"
+        }
+      },
+      {
+        "id": "result-mvdwg70q-f",
+        "type": "result",
+        "enabled": true,
+        "params": {}
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-mvdwg70q-d",
+        "source": "universe-mvdwg70q-9",
+        "target": "liquidity-mvdwg70q-a"
+      },
+      {
+        "id": "e-mvdwg70q-e",
+        "source": "liquidity-mvdwg70q-a",
+        "target": "minPrice-mvdwg70q-b"
+      },
+      {
+        "id": "e-mvdwg70q-g",
+        "source": "minPrice-mvdwg70q-b",
+        "target": "smaCross-mvdwg70q-c"
+      },
+      {
+        "id": "e-mvdwg70q-h",
+        "source": "smaCross-mvdwg70q-c",
+        "target": "result-mvdwg70q-f"
+      }
+    ]
+  }
+}

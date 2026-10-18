@@ -1,0 +1,75 @@
+{
+  "app": "monitor-b3",
+  "v": 2,
+  "id": "us-max52",
+  "name": "EUA · Máx. 52s + liq. US$ 5 mi",
+  "market": "us",
+  "active": true,
+  "desc": "Ativos líquidos que fecham acima da máxima das últimas 52 semanas (252 pregões). Rompimentos de máxima costumam ser estudados como sinal de tendência de alta.",
+  "screen": {
+    "name": "EUA · Máx. 52s + liq. US$ 5 mi",
+    "blocks": [
+      {
+        "id": "universe-mvdwg70r-11",
+        "type": "universe",
+        "enabled": true,
+        "params": {
+          "kinds": [
+            "acao",
+            "bdr"
+          ]
+        }
+      },
+      {
+        "id": "liquidity-mvdwg70r-12",
+        "type": "liquidity",
+        "enabled": true,
+        "params": {
+          "min": 5000000
+        }
+      },
+      {
+        "id": "minPrice-mvdwg70r-13",
+        "type": "minPrice",
+        "enabled": true,
+        "params": {
+          "min": 1
+        }
+      },
+      {
+        "id": "high52-mvdwg70r-14",
+        "type": "high52",
+        "enabled": true,
+        "params": {}
+      },
+      {
+        "id": "result-mvdwg70r-17",
+        "type": "result",
+        "enabled": true,
+        "params": {}
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-mvdwg70r-15",
+        "source": "universe-mvdwg70r-11",
+        "target": "liquidity-mvdwg70r-12"
+      },
+      {
+        "id": "e-mvdwg70r-16",
+        "source": "liquidity-mvdwg70r-12",
+        "target": "minPrice-mvdwg70r-13"
+      },
+      {
+        "id": "e-mvdwg70r-18",
+        "source": "minPrice-mvdwg70r-13",
+        "target": "high52-mvdwg70r-14"
+      },
+      {
+        "id": "e-mvdwg70r-19",
+        "source": "high52-mvdwg70r-14",
+        "target": "result-mvdwg70r-17"
+      }
+    ]
+  }
+}

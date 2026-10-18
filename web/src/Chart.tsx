@@ -1,6 +1,8 @@
+import { explain } from "./explain";
+import { Star } from "./Results";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createChart, createSeriesMarkers, CandlestickSeries, HistogramSeries, LineSeries, LineStyle, type IChartApi, type ISeriesMarkersPluginApi, type SeriesMarker, type Time, type UTCTimestamp } from "lightweight-charts";
-import { Block, BlockType, DEFS, KIND_LABEL, MKT, Row, SIGNAL_TYPES, fmtNum, fmtPct, hitLabel } from "./engine";
+import { Block, BlockType, DEFS, KIND_LABEL, MKT, Row, SIGNAL_TYPES, Screen, fmtNum, fmtPct, hitLabel } from "./engine";
 import { CAVEATS, StatCell } from "./History";
 import { track } from "./analytics";
 import { AGU_DEFAULTS, agulhadaSeries, normParams } from "./agulhada";
@@ -16,7 +18,28 @@ const PANE_W = (n: number) => [3, 1, 1, ...Array(Math.max(0, n - 3)).fill(1.4)];
 const paneTops = (n: number) => { const w = PANE_W(n), tot = w.reduce((a, b) => a + b, 0); let acc = 0; return w.slice(0, -1).map((x) => `${((acc += x) / tot) * 100 + 0.5}%`); };
 const ts = (d: string) => (Date.parse(d + "T00:00:00Z") / 1000) as UTCTimestamp;
 
-export default function ChartPanel({ row, hits, onClose, maximized = false, onToggleMax, signalParams }: { row: Row; hits: Block[]; onClose: () => void; maximized?: boolean; onToggleMax?: () => void; signalParams?: Partial<Record<BlockType, Record<string, any>>> }) {
+function Why({ screen, row }: { screen: Screen; row: Row }) {
+  const [open, setOpen] = useState(true);
+  const steps = useMemo(() => explain(screen, row), [screen, row]);
+  const res = steps.find((x) => x.block.type === "result");
+  const shown = steps.filter((x) => x.block.type !== "result");
+  return (
+    <div className="why">
+      <button className="link" aria-expanded={open} onClick={() => { track("explain_toggle", { open: !open, ticker: row.t, in_result: !!res?.pass }); setOpen(!open); }}>
+        {open ? "▾" : "▸"} {res?.pass ? "Por que passou nesta tela" : "Por que não está no resultado"}</button>
+      {open && <ol className="why-l">
+        {shown.map((x) => (
+          <li key={x.block.id} className={(x.pass ? "ok" : x.reached ? "no" : "na") + (x.off ? " off" : "")}>
+            <span className="why-i" aria-hidden>{x.pass ? "✓" : x.reached ? "✗" : "·"}</span>
+            <b>{x.label}</b><span className="why-v">{x.reached ? x.value : "não chegou a este bloco"}</span>
+          </li>))}
+      </ol>}
+      {open && <p className="mu cp-note">Cada linha usa as mesmas regras da triagem com os dados desta barra. Explica o filtro, não prevê o preço.</p>}
+    </div>
+  );
+}
+
+export default function ChartPanel({ row, hits, onClose, maximized = false, onToggleMax, signalParams, screen, starred, onStar }: { row: Row; hits: Block[]; onClose: () => void; maximized?: boolean; onToggleMax?: () => void; signalParams?: Partial<Record<BlockType, Record<string, any>>>; screen?: Screen; starred?: boolean; onStar?: (t: string) => void }) {
   const el = useRef<HTMLDivElement>(null);
   const chart = useRef<IChartApi | null>(null);
   const [data, setData] = useState<(Candles & { bc?: (number | null)[] }) | null>(cache.get(MKT.market + row.t) ?? null);
@@ -156,7 +179,7 @@ export default function ChartPanel({ row, hits, onClose, maximized = false, onTo
       <div className="cp-head">
         <div className="logo">{row.logo ? <img src={row.logo} alt="" onError={(e) => ((e.target as HTMLImageElement).style.display = "none")} /> : null}<span>{row.t.slice(0, 2)}</span></div>
         <div className="cp-id">
-          <div className="cp-t">{row.t}</div>
+          <div className="cp-t">{row.t} <Star on={!!starred} t={row.t} onStar={onStar} /></div>
           <div className="cp-s">{row.name} · {row.sector ?? "—"} · {KIND_LABEL[row.kind]}</div>
         </div>
         {onToggleMax && <button className="close cp-max" onClick={onToggleMax} aria-label={maximized ? "restaurar" : "tela cheia"} title={maximized ? "Restaurar (Esc)" : "Tela cheia"}>{maximized ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/></svg> : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>}</button>}
@@ -164,6 +187,7 @@ export default function ChartPanel({ row, hits, onClose, maximized = false, onTo
       </div>
       <div className="cp-price mono">{MKT.cur} {fmtNum(row.price)} <span className={up ? "up" : "dn"}>{fmtPct(row.chg)}</span></div>
       <div className="badges">{hits.map((h) => <span key={h.id} className={"bdg" + (h.type === "trix" && row.trixSide && row.trixSide < 0 ? " side-dn" : "")}>{hitLabel(h, row)}</span>)}</div>
+      {screen && <Why screen={screen} row={row} />}
       <div className="cp-ctl">
         <div className="seg">{([[63, "3M"], [126, "6M"], [252, "1A"]] as [number, string][]).map(([v, l]) => <button key={l} className={range === v ? "on" : ""} onClick={() => setRange(v)}>{l}</button>)}</div>
         <span className="mu">Diário</span>

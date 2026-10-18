@@ -1,0 +1,58 @@
+{
+  "app": "monitor-b3",
+  "v": 2,
+  "id": "br-agulhada",
+  "name": "Agulhada do Didi",
+  "market": "br",
+  "active": true,
+  "desc": "Criada por Odir Aguiar (Didi), observa três médias móveis curtas (3, 8 e 20 pregões). Quando elas se juntam (todas a menos de 1,5% umas das outras) o preço está \"respirando\" antes de escolher um lado; a média curta acima da longa indica compra e abaixo, venda. Muitos analistas esperam as médias se abrirem em leque para confirmar o movimento.",
+  "screen": {
+    "name": "Agulhada do Didi",
+    "blocks": [
+      {
+        "id": "universe-mvdwg70q-r",
+        "type": "universe",
+        "enabled": true,
+        "params": {
+          "kinds": [
+            "acao"
+          ]
+        }
+      },
+      {
+        "id": "agulhada-mvdwg70q-s",
+        "type": "agulhada",
+        "enabled": true,
+        "params": {
+          "dir": "both",
+          "alpha": 1.5,
+          "curta": 3,
+          "media": 8,
+          "longa": 20,
+          "fresh": false,
+          "confirm": false,
+          "confirmN": 3,
+          "window": 1
+        }
+      },
+      {
+        "id": "result-mvdwg70q-t",
+        "type": "result",
+        "enabled": true,
+        "params": {}
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-mvdwg70q-u",
+        "source": "universe-mvdwg70q-r",
+        "target": "agulhada-mvdwg70q-s"
+      },
+      {
+        "id": "e-mvdwg70q-v",
+        "source": "agulhada-mvdwg70q-s",
+        "target": "result-mvdwg70q-t"
+      }
+    ]
+  }
+}

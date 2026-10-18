@@ -15,6 +15,8 @@ export const PRESETS: Preset[] = [
     build: (l) => scr("Reversão (RSI<30)", "and", [...base(l), sig("rsi", { zone: "below", low: 30 })]) },
   { id: "golden", name: "Golden cross recente", desc: "A média de 50 dias cruzou para cima a de 200 dias no último pregão. É um indicador clássico, porém atrasado: confirma tendências que já começaram.",
     build: (l) => scr("Golden cross recente", "and", [...base(l), sig("smaCross", { dir: "golden" })]) },
+  { id: "watch", name: "Minha lista (★)", desc: "Mostra só os ativos em que você clicou na estrela (☆) nos resultados ou no gráfico. A lista fica salva apenas neste navegador. Para compartilhar ou propor como alerta, abra o bloco e use \"fixar lista atual\".",
+    build: () => scr("Minha lista (★)", "and", [makeBlock("universe", true, { kinds: ["acao", "fii", "bdr", "etf"] }), makeBlock("watchlist", true, { mode: "live" })]) },
   { id: "fii", name: "FIIs fortes vs IFIX", desc: "Fundos imobiliários líquidos cujo retorno em 21 dias supera o do IFIX (aproximado pelo ETF XFIX11) e que estão acima da média de 200 dias.",
     build: (l) => scr("FIIs fortes vs IFIX", "and", [...base(Math.min(l, 1_000_000), ["fii"]), makeBlock("sma200", true, { side: "above" }), sig("rs", { min: 0 })]) },
   { id: "gap", name: "Gap de alta com volume", desc: "Abertura pelo menos 2% acima do fechamento anterior, com volume 2× a média. Gaps com volume indicam que uma notícia ou fluxo moveu o preço antes do pregão.",

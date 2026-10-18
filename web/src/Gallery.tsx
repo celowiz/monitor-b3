@@ -1,4 +1,5 @@
-import { DEFS, Screen, isLogic, isSignal } from "./engine";
+import { DEFS, Market, Screen, isLogic, isSignal } from "./engine";
+import { BtLine, useBtIndex } from "./Backtest";
 import { PRESETS } from "./presets";
 
 function Mini({ s }: { s: Screen }) {
@@ -22,19 +23,21 @@ function Mini({ s }: { s: Screen }) {
   );
 }
 
-export default function Gallery({ liqMin, onPick, onClose }: { liqMin: number; onPick: (s: Screen) => void; onClose: () => void }) {
+export default function Gallery({ liqMin, market, onPick, onClose, onBacktest }: { liqMin: number; market: Market; onPick: (s: Screen, id: string) => void; onClose: () => void; onBacktest: (id: string) => void }) {
+  const bt = useBtIndex(market);
   return (
     <div className="modal-bg" onClick={onClose}>
       <div className="modal" role="dialog" aria-modal="true" aria-label="Galeria de telas" onClick={(e) => e.stopPropagation()}>
         <div className="modal-h"><div><h2>Galeria de telas</h2><span className="mu">Pontos de partida para estudar sinais. Conteúdo educativo, não é recomendação de investimento.</span></div>
           <button className="close" onClick={onClose} aria-label="fechar">×</button></div>
         <div className="gal-grid">
-          {PRESETS.map((p) => { const s = p.build(liqMin); return (
+          {PRESETS.filter((p) => !(market === "us" && p.id === "fii")).map((p) => { const s = p.build(liqMin); return (
             <article key={p.id} className="gal-card">
               <h3>{p.name}</h3>
               <Mini s={s} />
               <p>{p.desc}</p>
-              <button className="btn pri" onClick={() => onPick(p.build(liqMin))}>Usar esta tela</button>
+              <BtLine s={bt.get(p.id)} onOpen={bt.has(p.id) ? () => onBacktest(p.id) : undefined} />
+              <button className="btn pri" onClick={() => onPick(p.build(liqMin), p.id)}>Usar esta tela</button>
             </article>); })}
         </div>
       </div>

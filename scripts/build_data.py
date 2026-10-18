@@ -31,6 +31,7 @@ import yfinance as yf
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import adjust  # noqa: E402
+import panel as panel_mod  # noqa: E402
 import history  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -333,6 +334,7 @@ def indicators(df: pd.DataFrame, bench_ret21: float | None) -> dict:
     out["trixSide"] = int(tx["side"].iloc[-1])
     out["trix"] = r(tx["trix"].iloc[-1], 4)
     out["trixSig"] = r(tx["sig"].iloc[-1], 4)
+    out["trixBand"] = r(tx["band"].iloc[-1], 4)
     out["sma50Prev"] = r(sma[50].iloc[-2]) if n > 1 else None
     out["sma200Prev"] = r(sma[200].iloc[-2]) if n > 1 else None
     return out
@@ -386,6 +388,8 @@ def main() -> int:
     ap.add_argument("--config", default=str(ROOT / "config.json"))
     ap.add_argument("--market", choices=("br", "us"), default="br")
     ap.add_argument("--limit", type=int, default=None, help="universo reduzido (teste local)")
+    ap.add_argument("--panel-dir", default=str(ROOT / ".cache"), help="onde gravar o painel diário do backtest")
+    ap.add_argument("--no-panel", action="store_true")
     args = ap.parse_args()
     cfg = json.loads(Path(args.config).read_text())
     us = args.market == "us"
@@ -404,13 +408,15 @@ def main() -> int:
         tickers = sorted(store)
         membership = {"SP500": set(tickers)}
         bench_sym, ifix_proxy = "^GSPC", None
-        syms = tickers + [bench_sym]
+        tr_sym = "^SP500TR"  # S&P 500 total-return: comparação justa no backtest (o ^GSPC não inclui dividendos)
+        syms = tickers + [bench_sym, tr_sym]
         ysym = lambda t: t  # noqa: E731
     else:
         tickers, store = build_universe(cfg, args.limit)
         membership = {ix: set(index_constituents(ix)) for ix in INDEXES}
         bench_sym = "^BVSP"
         ifix_proxy = cfg.get("ifix_proxy", "XFIX11.SA")
+        tr_sym = None  # Ibovespa e IFIX já são índices de retorno total
         syms = [f"{t}.SA" for t in tickers] + [bench_sym, ifix_proxy]
         ysym = lambda t: f"{t}.SA"  # noqa: E731
     log.info("[%s] universo: %d tickers", args.market, len(tickers))
@@ -442,7 +448,7 @@ def main() -> int:
     rows = []
     hist_frames: dict[str, pd.DataFrame] = {}
     hist_bench: dict[str, pd.Series | None] = {}
-    failed_t = sorted(s_.replace(".SA", "") for s_ in failed if s_ not in (bench_sym, ifix_proxy))
+    failed_t = sorted(s_.replace(".SA", "") for s_ in failed if s_ not in (bench_sym, ifix_proxy, tr_sym))
     for t in tickers:
         df = frames.get(ysym(t))
         if df is None:
@@ -466,6 +472,7 @@ def main() -> int:
         (cdir / f"{t}.json").write_text(json.dumps({**candles_payload(df, bc["Close"] if bc is not None else None), "brk": brk}, separators=(",", ":")))
         hist_frames[t] = df
         hist_bench[t] = bc["Close"] if bc is not None else None
+        rows[-1]["_df"] = df
 
     t0 = time.time()
     # janelas que atravessam uma quebra não explicada ficam fora: 252 pregões depois (indicadores contaminados)
@@ -475,6 +482,24 @@ def main() -> int:
     hist = history.summarize(history.collect(hist_frames, bench["Close"] if bench is not None else None, hist_bench, excl))
     log.info("histórico de sinais: %.1fs", time.time() - t0)
 
+    # painel diário para o backtest (não publicado; lido por web/scripts/derived.ts)
+    if bench is not None and not args.no_panel:
+        t0 = time.time()
+        items = [{"t": x["t"], "name": x["name"], "kind": x["kind"], "sector": x["sector"], "subsector": x["subsector"],
+                  "idx": x["idx"], "rsBench": x["rsBench"], "df": x["_df"], "bench_close": hist_bench.get(x["t"]),
+                  "excl": excl.get(x["t"])} for x in rows]
+        pn = panel_mod.build_panel(args.market, bench.index, items)
+        benches = {"main": bench["Close"]}
+        if ifix is not None:
+            benches["ifix"] = ifix["Close"]
+        if tr_sym and frames.get(tr_sym) is not None:
+            benches["main"] = frames[tr_sym]["Close"]
+            pn["mainLabel"] = "S&P 500 TR"
+        pn["mainLabel"] = pn.get("mainLabel") or ("S&P 500" if us else "Ibovespa")
+        panel_mod.write_panel(Path(args.panel_dir) / f"panel_{args.market}.json", pn, benches, bench.index)
+        log.info("painel do backtest: %d ativos × %d pregões em %.1fs", len(items), len(pn["dates"]), time.time() - t0)
+    for x in rows:
+        x.pop("_df", None)
     last_dates = sorted({x["date"] for x in rows})
     liq_default = float(ucfg.get("liq21_min_usd", 50_000_000)) if us else cfg.get("filters", {}).get("liq21_min_brl", 5_000_000)
     payload = {

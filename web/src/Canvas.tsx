@@ -12,6 +12,8 @@ import { MIN_LOGIC_INPUTS, canConnect, connect, depths, hasOutput, inputsOf, rem
 interface CanvasProps {
   screen: Screen; ev: Evaluated; total: number;
   sectors: string[]; tree: Record<string, string[]>; onChange: (s: Screen) => void; step: number; runId: number;
+  /** modo apresentação: só leitura (sem arrastar, conectar, apagar ou editar) */
+  readOnly?: boolean;
 }
 export type Status = "idle" | "running" | "success" | "error";
 
@@ -126,7 +128,7 @@ const nodeTypes = { block: BlockNode, logic: LogicNode, res: ResNode };
 const PICK: [string, BlockType[]][] = [["Filtros", FILTER_TYPES.slice(1)], ["Sinais", SIGNAL_TYPES], ["Lógica", ["and", "or"]], ["Saída", ["result"]]];
 const nodeType = (t: BlockType) => (isLogic(t) ? "logic" : t === "result" ? "res" : "block");
 
-function Inner({ screen, ev, total, sectors, tree, onChange, step }: CanvasProps) {
+function Inner({ screen, ev, total, sectors, tree, onChange, step, readOnly: ro = false }: CanvasProps) {
   const rf = useReactFlow();
   const [picker, setPicker] = useState<{ from: string; x: number; y: number } | null>(null);
   // Modo controlado: a seleção (para Delete) fica aqui, fora do modelo da tela.
@@ -143,12 +145,12 @@ function Inner({ screen, ev, total, sectors, tree, onChange, step }: CanvasProps
     const err = (isFilter(b.type) && b.enabled && ev.perBlock.get(b.id) === 0) || (b.type === "result" && ev.complete && ev.results.length === 0);
     const status: Status = warn ? "idle" : !b.enabled && step > mine ? "idle" : statusAt(step, mine, err);
     const common = { block: b, status, count: ev.perBlock.get(b.id), inCount: b.type === "universe" ? total : ev.perIn.get(b.id) ?? null, warn,
-      remove: () => remove(b.id), onPlus: hasOutput(b.type) ? () => setPicker({ from: b.id, x: (b.pos?.x ?? 0) + 320, y: b.pos?.y ?? 0 }) : undefined };
+      remove: () => remove(b.id), onPlus: !ro && hasOutput(b.type) ? () => setPicker({ from: b.id, x: (b.pos?.x ?? 0) + 320, y: b.pos?.y ?? 0 }) : undefined };
     const data = b.type === "result" ? { ...common, n: ev.results.length, complete: ev.complete }
       : isLogic(b.type) ? { ...common, nIn: inputsOf(screen, b.id).length, toggle: () => setBlock({ ...b, type: b.type === "and" ? "or" : "and" }) }
       : { ...common, sectors, tree, set: setBlock };
     return { id: b.id, type: nodeType(b.type), position: b.pos ?? { x: 0, y: 0 }, selected: selN.has(b.id), dragHandle: isLogic(b.type) || b.type === "result" ? undefined : ".bn-head", data };
-  }), [screen, ev, d, warnOf, step, total, sectors, tree, setBlock, remove, selN]);
+  }), [screen, ev, d, warnOf, step, total, sectors, tree, setBlock, remove, selN, ro]);
 
   const edges: Edge[] = useMemo(() => {
     const byId = new Map(screen.blocks.map((b) => [b.id, b]));
@@ -219,16 +221,16 @@ function Inner({ screen, ev, total, sectors, tree, onChange, step }: CanvasProps
   };
 
   return (
-    <div className="canvas" id="mb3-canvas" ref={wrap} onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; }} onDrop={onDrop}>
+    <div className={"canvas" + (ro ? " ro" : "")} id="mb3-canvas" ref={wrap} onDragOver={(e) => { if (ro) return; e.preventDefault(); e.dataTransfer.dropEffect = "move"; }} onDrop={(e) => { if (!ro) onDrop(e); }}>
       <ReactFlow zoomOnScroll={false} panOnScroll={false} preventScrolling={false} zoomOnPinch zoomActivationKeyCode={["Meta", "Control"]} panOnDrag
         nodes={nodes} edges={edges} nodeTypes={nodeTypes} edgeTypes={edgeTypes} onNodesChange={onNodesChange} onEdgesChange={onEdgesChange}
-        onConnect={onConnect} isValidConnection={isValidConnection} connectOnClick nodesConnectable edgesFocusable elementsSelectable
+        onConnect={ro ? undefined : onConnect} isValidConnection={isValidConnection} connectOnClick={!ro} nodesConnectable={!ro} nodesDraggable={!ro} edgesFocusable={!ro} elementsSelectable={!ro}
         fitView fitViewOptions={{ padding: 0.12 }} minZoom={0.25} maxZoom={1.6} proOptions={{ hideAttribution: true }}
-        onPaneClick={() => setPicker(null)} deleteKeyCode={["Delete", "Backspace"]} colorMode="dark">
+        onPaneClick={() => setPicker(null)} deleteKeyCode={ro ? null : ["Delete", "Backspace"]} colorMode="dark">
         <Background variant={BackgroundVariant.Dots} gap={18} size={1} color="#22262a" />
         <Controls showInteractive={false} position="bottom-left" />
       </ReactFlow>
-      <div className="canvas-hint">{total} no universo · arraste da saída (●) até uma entrada para conectar · selecione uma ligação e tecle Delete para remover · ⌘/Ctrl + rolar para zoom</div>
+      <div className="canvas-hint">{ro ? <>{total} no universo · modo apresentação: só leitura · arraste o fundo para mover, ⌘/Ctrl + rolar para zoom</> : <>{total} no universo · arraste da saída (●) até uma entrada para conectar · selecione uma ligação e tecle Delete para remover · ⌘/Ctrl + rolar para zoom</>}</div>
       <div className="auto-pill"><i className="dot" />recalcula automaticamente</div>
       {ev.problems.length > 0 && (
         <div className="probs" role="status">
@@ -237,7 +239,7 @@ function Inner({ screen, ev, total, sectors, tree, onChange, step }: CanvasProps
           <span className="mu">clique para ir até o nó</span>
         </div>
       )}
-      {picker && (
+      {picker && !ro && (
         <div className="picker" role="menu" aria-label="adicionar bloco conectado">
           <div className="picker-h">Adicionar após <b>{DEFS[screen.blocks.find((b) => b.id === picker.from)?.type ?? "universe"].short}</b><button className="bn-x" onClick={() => setPicker(null)} aria-label="fechar">×</button></div>
           {PICK.map(([g, ts]) => (

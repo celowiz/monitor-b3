@@ -1,0 +1,80 @@
+{
+  "app": "monitor-b3",
+  "v": 2,
+  "id": "br-rsi30",
+  "name": "Reversão (RSI<30)",
+  "market": "br",
+  "active": true,
+  "desc": "O RSI(14) mede a velocidade das altas e baixas recentes numa escala de 0 a 100. Abaixo de 30 é chamado de sobrevenda, região onde alguns analistas procuram possíveis repiques.",
+  "screen": {
+    "name": "Reversão (RSI<30)",
+    "blocks": [
+      {
+        "id": "universe-mvdwg70q-i",
+        "type": "universe",
+        "enabled": true,
+        "params": {
+          "kinds": [
+            "acao",
+            "bdr"
+          ]
+        }
+      },
+      {
+        "id": "liquidity-mvdwg70q-j",
+        "type": "liquidity",
+        "enabled": true,
+        "params": {
+          "min": 5000000
+        }
+      },
+      {
+        "id": "minPrice-mvdwg70q-k",
+        "type": "minPrice",
+        "enabled": true,
+        "params": {
+          "min": 1
+        }
+      },
+      {
+        "id": "rsi-mvdwg70q-l",
+        "type": "rsi",
+        "enabled": true,
+        "params": {
+          "zone": "below",
+          "low": 30,
+          "high": 70,
+          "entered": false
+        }
+      },
+      {
+        "id": "result-mvdwg70q-o",
+        "type": "result",
+        "enabled": true,
+        "params": {}
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-mvdwg70q-m",
+        "source": "universe-mvdwg70q-i",
+        "target": "liquidity-mvdwg70q-j"
+      },
+      {
+        "id": "e-mvdwg70q-n",
+        "source": "liquidity-mvdwg70q-j",
+        "target": "minPrice-mvdwg70q-k"
+      },
+      {
+        "id": "e-mvdwg70q-p",
+        "source": "minPrice-mvdwg70q-k",
+        "target": "rsi-mvdwg70q-l"
+      },
+      {
+        "id": "e-mvdwg70q-q",
+        "source": "rsi-mvdwg70q-l",
+        "target": "result-mvdwg70q-o"
+      }
+    ]
+  }
+}
