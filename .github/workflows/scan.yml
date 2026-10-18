@@ -45,7 +45,7 @@ jobs:
           cache: pip
       - run: pip install -r requirements.txt
       - name: Unit tests (indicadores + screener legado)
-        run: python -m unittest tests.test_build_data tests.test_history tests.test_adjust tests.test_screener_chart tests.test_screener_filters -v
+        run: python -m unittest tests.test_build_data tests.test_history tests.test_adjust tests.test_panel tests.test_screener_chart tests.test_screener_filters -v
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
@@ -86,7 +86,7 @@ jobs:
         run: pip install -r requirements.txt
       - name: Unit tests
         if: steps.cal.outputs.skip != 'true'
-        run: python -m unittest tests.test_b3_calendar tests.test_nyse_calendar tests.test_build_data tests.test_history tests.test_adjust -v
+        run: python -m unittest tests.test_b3_calendar tests.test_nyse_calendar tests.test_build_data tests.test_history tests.test_adjust tests.test_panel -v
 
       # Eventos de ações da B3 (grupamentos/desdobramentos), por emissor, renovados a cada ~20 h (scripts/adjust.py).
       - name: Cache eventos B3
@@ -115,10 +115,23 @@ jobs:
           node-version: "20"
           cache: npm
           cache-dependency-path: web/package-lock.json
+      - name: Dependências do app
+        if: steps.cal.outputs.skip != 'true'
+        working-directory: web
+        run: npm ci
+
+      # Backtest walk-forward das telas da galeria e dos alertas (painel em .cache/panel_*.json, gerado acima)
+      # e alertas de fechamento: data/alerts/*.json + RSS. O estado anterior vem do site publicado (sem commit,
+      # sem email). Falha aqui não derruba a publicação: o app esconde backtest/alertas ausentes.
+      - name: Backtest e alertas (RSS)
+        if: steps.cal.outputs.skip != 'true'
+        working-directory: web
+        run: npx vite-node scripts/derived.ts -- --data public/data --panel ../.cache --alerts ../alerts || echo "::warning::backtest/alertas falharam nesta rodada"
+
       - name: Build do app
         if: steps.cal.outputs.skip != 'true'
         working-directory: web
-        run: npm ci && npm test && npm run build && touch dist/.nojekyll
+        run: npm test && npm run build && touch dist/.nojekyll
 
       - name: Exigir dados antes de publicar
         if: steps.cal.outputs.skip != 'true'

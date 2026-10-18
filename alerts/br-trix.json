@@ -1,0 +1,48 @@
+{
+  "app": "monitor-b3",
+  "v": 2,
+  "id": "br-trix",
+  "name": "TRIX",
+  "market": "br",
+  "active": true,
+  "desc": "O TRIX é a variação percentual diária de uma média móvel exponencial aplicada três vezes (aqui, de 9 pregões), o que filtra boa parte do ruído do preço. O sinal aparece quando o TRIX cruza a sua própria média (EMA de 9) longe do normal recente: abaixo da faixa típica dos últimos 60 pregões e virando para cima indica compra; acima da faixa e virando para baixo, venda. Regra fixa, sem parâmetros.",
+  "screen": {
+    "name": "TRIX",
+    "blocks": [
+      {
+        "id": "universe-mvdwg70r-w",
+        "type": "universe",
+        "enabled": true,
+        "params": {
+          "kinds": [
+            "acao"
+          ]
+        }
+      },
+      {
+        "id": "trix-mvdwg70r-x",
+        "type": "trix",
+        "enabled": true,
+        "params": {}
+      },
+      {
+        "id": "result-mvdwg70r-y",
+        "type": "result",
+        "enabled": true,
+        "params": {}
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-mvdwg70r-z",
+        "source": "universe-mvdwg70r-w",
+        "target": "trix-mvdwg70r-x"
+      },
+      {
+        "id": "e-mvdwg70r-10",
+        "source": "trix-mvdwg70r-x",
+        "target": "result-mvdwg70r-y"
+      }
+    ]
+  }
+}

@@ -1,4 +1,4 @@
-import { Block, KIND_LABEL, Kind , MKT } from "./engine";
+import { Block, KIND_LABEL, Kind, MKT, WATCH, parseList } from "./engine";
 import { AGU_LIMITS } from "./agulhada";
 import { track } from "./analytics";
 
@@ -155,6 +155,21 @@ export function BlockEditor({ block, sectors, tree = {}, onParams }: Props) {
             <label className="ck"><input type="checkbox" checked={p.confirm} onChange={(e) => set("confirm", e.target.checked)} />abrir em leque em até</label>
             <Num value={p.confirmN} onChange={int("confirmN")} suffix="preg." />
           </div>
+        </div>
+      );
+    }
+    case "watchlist": {
+      const set = (k: string, v: string) => { trackParam("watchlist", k, k === "tickers" ? parseList(v).length : v); onParams({ [k]: v }); };
+      return (
+        <div className="col nodrag ed-wl">
+          <Seg value={p.mode} options={[["live", "★ Minhas estrelas"], ["fixed", "Lista fixa"]]} onChange={(v) => set("mode", v)} />
+          {p.mode === "fixed" ? <>
+            <textarea className="ed-txt nodrag nowheel" rows={2} value={p.tickers} placeholder="PETR4, VALE3…" onChange={(e) => set("tickers", e.target.value.toUpperCase())} />
+            <button className="link" onClick={() => onParams({ tickers: [...WATCH.set].sort().join(", ") })}>copiar minhas estrelas ({WATCH.set.size})</button>
+          </> : <>
+            <span className="mu sm">{WATCH.set.size ? `${WATCH.set.size} ativo(s) com estrela neste navegador` : "Nenhuma estrela ainda: clique em ☆ nos resultados ou no gráfico."}</span>
+            <button className="link" disabled={!WATCH.set.size} onClick={() => onParams({ mode: "fixed", tickers: [...WATCH.set].sort().join(", ") })}>fixar lista atual (vale em links e alertas)</button>
+          </>}
         </div>
       );
     }

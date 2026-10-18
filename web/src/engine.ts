@@ -14,11 +14,14 @@ export interface Row {
   /** últimos fechamentos (o último = price), para sinais com períodos editáveis (Agulhada) */
   cl?: number[];
   /** TRIX (regra fixa, calculado no job de dados com o histórico inteiro): +1 compra, −1 venda, 0 nada hoje */
-  trixSide?: number; trix?: number | null; trixSig?: number | null;
+  trixSide?: number; trix?: number | null; trixSig?: number | null; trixBand?: number | null;
 }
 
 export type Market = "br" | "us";
 // Contexto do mercado ativo (moeda, índice, opções do filtro de índice). Ajustado pelo App ao carregar os dados.
+/** Watchlist do navegador (estrelas), por mercado. Ajustada pelo App; vazia fora do navegador (alertas/backtest no Actions). */
+export const WATCH = { set: new Set<string>() };
+export function setWatchContext(tickers: Iterable<string>) { WATCH.set = new Set(tickers); }
 export const MKT = { market: "br" as Market, cur: "R$", bench: "Ibov", indexOptions: [["IBOV", "Ibovespa"], ["IFIX", "IFIX"], ["SMLL", "Small Caps"]] as [string, string][] };
 export function setMarketContext(m: Market) {
   MKT.market = m;
@@ -40,7 +43,7 @@ export interface Latest {
 }
 
 export type BlockType =
-  | "universe" | "sector" | "liquidity" | "minPrice" | "chgRange" | "blocklist" | "sma200" | "index"
+  | "universe" | "sector" | "liquidity" | "minPrice" | "chgRange" | "blocklist" | "sma200" | "index" | "watchlist"
   | "high52" | "low52" | "smaCross" | "volume" | "rsi" | "rs" | "gap" | "range" | "streak" | "agulhada" | "trix"
   | "and" | "or" | "result";
 
@@ -52,7 +55,7 @@ export interface GEdge { id: string; source: string; target: string }
 /** Tela = grafo: nós (blocks) + arestas explícitas. `combine` só existe em telas antigas (v1) e é convertido por migrateScreen. */
 export interface Screen { name: string; blocks: Block[]; edges: GEdge[]; combine?: "and" | "or"; builtin?: boolean }
 
-export const FILTER_TYPES: BlockType[] = ["universe", "sector", "liquidity", "minPrice", "chgRange", "blocklist", "sma200", "index"];
+export const FILTER_TYPES: BlockType[] = ["universe", "watchlist", "sector", "liquidity", "minPrice", "chgRange", "blocklist", "sma200", "index"];
 export const SIGNAL_TYPES: BlockType[] = ["high52", "low52", "smaCross", "volume", "rsi", "rs", "gap", "range", "streak", "agulhada", "trix"];
 export const LOGIC_TYPES: BlockType[] = ["and", "or"];
 export const isFilter = (t: BlockType) => FILTER_TYPES.includes(t);
@@ -71,6 +74,7 @@ export const DEFS: Record<BlockType, BlockDef> = {
   blocklist: { label: "Lista de exclusão", icon: "⊘", group: "Filtros", short: "Exclusão", defaults: { tickers: "" } },
   sma200: { label: "Posição vs SMA200", icon: "∼", group: "Filtros", short: "vs SMA200", defaults: { side: "above" } },
   index: { label: "Índice", icon: "◇", group: "Filtros", short: "Índice", defaults: { indices: ["IBOV"] } },
+  watchlist: { label: "Minha lista", icon: "★", group: "Filtros", short: "Minha lista", defaults: { mode: "live", tickers: "" } },
   high52: { label: "Rompimento máx. 52s", icon: "↑", group: "Sinais", short: "Máx. 52s", defaults: {} },
   low52: { label: "Rompimento mín. 52s", icon: "↓", group: "Sinais", short: "Mín. 52s", defaults: {} },
   smaCross: { label: "Cruzamento SMA 50/200", icon: "×", group: "Sinais", short: "SMA 50/200", defaults: { dir: "golden" } },
@@ -118,6 +122,7 @@ export function filterPass(b: Block, r: Row): boolean {
     case "index": return !p.indices?.length || (r.idx ?? []).some((i) => p.indices.includes(i));
     case "liquidity": return (r.liq21 ?? 0) >= Number(p.min || 0);
     case "minPrice": return r.price >= Number(p.min || 0);
+    case "watchlist": return p.mode === "fixed" ? parseList(p.tickers).includes(r.t) : WATCH.set.has(r.t);
   }
   return true;
 }
@@ -170,6 +175,7 @@ export function blockSummary(b: Block): string {
     case "index": return p.indices?.length ? `membro de ${p.indices.join(" ou ")}` : "qualquer";
     case "liquidity": return `≥ ${fmtBrl(p.min)}`;
     case "minPrice": return `≥ ${MKT.cur} ${Number(p.min).toLocaleString("pt-BR")}`;
+    case "watchlist": return p.mode === "fixed" ? `lista fixa · ${parseList(p.tickers).length} ativo(s)` : `★ estrelas deste navegador · ${WATCH.set.size} ativo(s)`;
     case "high52": return "preço > máx. 252 pregões (ex-hoje)";
     case "low52": return "preço < mín. 252 pregões (ex-hoje)";
     case "smaCross": return { golden: "golden: 50 cruza 200 ↑ hoje", death: "death: 50 cruza 200 ↓ hoje", any: "qualquer cruzamento hoje" }[p.dir as string] ?? "";

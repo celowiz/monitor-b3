@@ -38,9 +38,18 @@ const Badges = ({ hits, r }: { hits?: Block[]; r?: Row }) => {
 };
 const cls = (v: number | null | undefined) => (v == null ? "" : v >= 0 ? "up" : "dn");
 
-export default function Results({ runId, done, ev, total, failed, selected, onSelect, compact }: {
+export function Star({ on, t, onStar }: { on: boolean; t: string; onStar?: (t: string) => void }) {
+  if (!onStar) return null;
+  const act = (e: { stopPropagation: () => void; preventDefault: () => void }) => { e.stopPropagation(); e.preventDefault(); onStar(t); };
+  return <span role="button" tabIndex={0} className={"star" + (on ? " on" : "")} title={on ? "Remover de Minha lista" : "Adicionar a Minha lista"} aria-label={on ? `Remover ${t} de Minha lista` : `Adicionar ${t} a Minha lista`} aria-pressed={on}
+    onClick={act} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") act(e); }}>{on ? "★" : "☆"}</span>;
+}
+
+export default function Results({ runId, done, ev, total, failed, selected, onSelect, compact, watch, onStar }: {
   runId: number; done: boolean; ev: Evaluated; total: number; failed: string[]; selected: string | null; onSelect: (t: string) => void; compact: boolean;
+  watch?: string[]; onStar?: (t: string) => void;
 }) {
+  const ws = new Set(watch ?? []);
   const { sorted, sort, setSort } = useSorted(ev.results);
   const shown = done ? sorted : [];
   const rv = (i: number) => ({ animationDelay: `${Math.min(i, 25) * 28}ms` });
@@ -70,7 +79,7 @@ export default function Results({ runId, done, ev, total, failed, selected, onSe
           {shown.map((r, i) => (
             <button key={r.t} style={rv(i)} className={"card" + (selected === r.t ? " sel" : "")} onClick={() => onSelect(r.t)}>
               <Logo r={r} />
-              <div className="c-id"><b>{r.t}</b><span>{r.name}</span><div className="badges"><Badges hits={ev.hits.get(r.t)} r={r} /></div></div>
+              <div className="c-id"><b>{r.t} <Star on={ws.has(r.t)} t={r.t} onStar={onStar} /></b><span>{r.name}</span><div className="badges"><Badges hits={ev.hits.get(r.t)} r={r} /></div></div>
               <div className="c-num mono"><b>{fmtNum(r.price)}</b><span className={cls(r.chg)}>{fmtPct(r.chg)}</span><span className="mu">RSI {fmtNum(r.rsi, 1)}</span></div>
             </button>
           ))}
@@ -92,7 +101,7 @@ export default function Results({ runId, done, ev, total, failed, selected, onSe
                 const d = dist200(r);
                 return (
                   <tr key={r.t} style={rv(i)} className={selected === r.t ? "sel" : ""} onClick={() => onSelect(r.t)}>
-                    <td><div className="tk"><Logo r={r} /><div><b>{r.t}</b><span>{r.name}</span></div></div></td>
+                    <td><div className="tk"><Star on={ws.has(r.t)} t={r.t} onStar={onStar} /><Logo r={r} /><div><b>{r.t}</b><span>{r.name}</span></div></div></td>
                     <td><span className="kind">{KIND_LABEL[r.kind]}</span></td>
                     <td className="num mono">{fmtNum(r.price)}</td>
                     <td className={"num mono " + cls(r.chg)}>{fmtPct(r.chg)}</td>
