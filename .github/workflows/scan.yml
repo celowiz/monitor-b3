@@ -36,19 +36,19 @@ jobs:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Unit tests (calendário)
         run: python3 -m unittest tests.test_b3_calendar tests.test_b3_site tests.test_nyse_calendar -v
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip
       - run: pip install -r requirements.txt
       - name: Unit tests (indicadores + screener legado)
         run: python -m unittest tests.test_build_data tests.test_history tests.test_adjust tests.test_panel tests.test_screener_chart tests.test_screener_filters -v
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
-          node-version: "20"
+          node-version: "24"
           cache: npm
           cache-dependency-path: web/package-lock.json
       - name: Build do app
@@ -65,7 +65,7 @@ jobs:
       # PR/branch: sempre roda (validação); main: respeita o calendário B3.
       FORCE_RUN: ${{ (github.event_name == 'pull_request' || github.ref != 'refs/heads/main') && 'true' || github.event.inputs.force || 'false' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Roda se B3 OU NYSE tiver pregão; cada mercado sempre é regenerado (o artefato do Pages
       # substitui o site inteiro), então num feriado de um deles os dados ficam no último fechamento.
@@ -77,7 +77,7 @@ jobs:
           . <(grep -E '^(skip|skip_us)=' "$GITHUB_OUTPUT" | sed 's/^/export /')
           if [ "$skip" = "true" ] && [ "$skip_us" = "true" ]; then echo "skip=true" >> "$GITHUB_OUTPUT"; else echo "skip=false" >> "$GITHUB_OUTPUT"; fi
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         if: steps.cal.outputs.skip != 'true'
         with:
           python-version: "3.12"
@@ -91,7 +91,7 @@ jobs:
       # Eventos de ações da B3 (grupamentos/desdobramentos), por emissor, renovados a cada ~20 h (scripts/adjust.py).
       - name: Cache eventos B3
         if: steps.cal.outputs.skip != 'true'
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: .cache/b3_events.json
           key: b3-events-${{ github.run_id }}
@@ -109,10 +109,10 @@ jobs:
           [ $USC -eq 0 ] || echo "::warning::dados US falharam (exit $USC); publicando só BR"
           exit $BRC
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         if: steps.cal.outputs.skip != 'true'
         with:
-          node-version: "20"
+          node-version: "24"
           cache: npm
           cache-dependency-path: web/package-lock.json
       - name: Dependências do app
@@ -137,14 +137,14 @@ jobs:
         if: steps.cal.outputs.skip != 'true'
         run: test -f web/dist/index.html && test -f web/dist/data/latest.json && test -f web/dist/data/latest_br.json
 
-      - uses: actions/configure-pages@v5
+      - uses: actions/configure-pages@v6
         if: steps.cal.outputs.skip != 'true' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         if: steps.cal.outputs.skip != 'true' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
         with:
           path: web/dist
       # Fora da main: só valida e guarda o build como artefato comum (sem publicar).
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: steps.cal.outputs.skip != 'true' && (github.ref != 'refs/heads/main' || github.event_name == 'pull_request')
         with:
           name: site-preview
