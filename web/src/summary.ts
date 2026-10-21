@@ -31,7 +31,7 @@ export function marketSummary(br: Latest, us?: Latest | null) {
   const b = breadth(rows);
   const bench = br.benchmark as Latest["benchmark"] & { chg?: number | null; ifixChg?: number | null; name?: string; symbol?: string };
   const sorted = [...rows].filter((r) => r.chg != null).sort((a, z) => (z.chg! - a.chg!) || a.t.localeCompare(z.t));
-  const usBench = us?.benchmark as (Latest["benchmark"] & { chg?: number | null }) | undefined;
+  const usBench = us?.benchmark as (Latest["benchmark"] & { chg?: number | null; date?: string | null }) | undefined;
   return {
     schema: SUMMARY_SCHEMA,
     project: "monitor-b3",
@@ -58,7 +58,8 @@ export function marketSummary(br: Latest, us?: Latest | null) {
     top: sorted.slice(0, 5).map((r) => ({ t: r.t, chg: r5(r.chg) })),
     bottom: sorted.slice(-5).reverse().map((r) => ({ t: r.t, chg: r5(r.chg) })),
     us: us && usBench
-      ? { as_of: us.dataDate, generated_at: us.generatedAt, final: isClosingRun("us", us.generatedAt, us.dataDate),
+      ? { // data do próprio ^GSPC: pode ser mais nova que a das ações dos EUA (dataDate) quando o Yahoo atrasa as barras delas
+          as_of: usBench.date ?? us.dataDate, generated_at: us.generatedAt, final: isClosingRun("us", us.generatedAt, us.dataDate),
           bench: { name: "S&P 500", symbol: "^GSPC", price: r2(usBench.price), chg: r5(usBench.chg), ret21: r5(usBench.ret21) } }
       : null,
   };

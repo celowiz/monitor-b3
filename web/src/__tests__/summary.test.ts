@@ -47,4 +47,10 @@ describe("summary", () => {
     expect(big.signals.high52.items.length).toBe(12);
     expect(JSON.stringify(big).length).toBeLessThan(20_000);
   });
+  it("S&P 500 usa a data do próprio benchmark", () => {
+    const us = (date?: string) => L(rows, { dataDate: "2026-10-19", generatedAt: "2026-10-20T22:08:05-03:00",
+      benchmark: { name: "S&P 500", symbol: "^GSPC", price: 7712.57, chg: 0.00284, ret21: -0.00671, ...(date ? { date } : {}) } as Latest["benchmark"] });
+    expect(marketSummary(L(rows), us("2026-10-20")).us).toMatchObject({ as_of: "2026-10-20", bench: { price: 7712.57 } });
+    expect(marketSummary(L(rows), us()).us?.as_of).toBe("2026-10-19"); // dados antigos sem "date"
+  });
 });
