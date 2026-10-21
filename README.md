@@ -11,6 +11,7 @@ Painel educacional em blocos (estilo n8n, React Flow) para montar telas de **aç
 - `scripts/build_data.py` (GitHub Actions, ~30 min no pregão, dias úteis, pula feriados B3 via `b3_calendar.py`) gera:
   - `data/latest.json`: universo + indicadores por ticker, `failedTickers`, horário da rodada.
   - `data/candles/<TICKER>.json`: ~1 ano de candles diários + SMA50/SMA200/máx. 52s, carregado sob demanda.
+  - `data/summary.json` (`web/scripts/summary.ts`, ~2 KB): amplitude e sinais do dia das ações líquidas da B3 (mesmas regras do app), lido pela página [Mercado Hoje](https://celowiz.github.io/mercado-hoje/) do portfólio.
 - `web/`: Vite + React + TypeScript + `@xyflow/react` + `lightweight-charts`, base `/monitor-b3/`.
 - Os dados vão **só no artefato do Pages** (nada é commitado a cada rodada). Falha na geração = nada publicado, site anterior continua no ar.
 - Telas salvas ficam no `localStorage` do navegador (sem cadastro).

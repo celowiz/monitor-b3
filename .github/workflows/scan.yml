@@ -128,6 +128,13 @@ jobs:
         working-directory: web
         run: npx vite-node scripts/derived.ts -- --data public/data --panel ../.cache --alerts ../alerts || echo "::warning::backtest/alertas falharam nesta rodada"
 
+      # Resumo pequeno (data/summary.json) lido pela página Mercado Hoje do portfólio. Mesmas regras do app
+      # (breadth + signalHit). Falha aqui não derruba a publicação: o portfólio mantém o último resumo válido.
+      - name: Resumo para o portfólio
+        if: steps.cal.outputs.skip != 'true'
+        working-directory: web
+        run: npx vite-node scripts/summary.ts -- --data public/data || echo "::warning::summary.json falhou nesta rodada"
+
       - name: Build do app
         if: steps.cal.outputs.skip != 'true'
         working-directory: web
