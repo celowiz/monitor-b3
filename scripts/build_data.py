@@ -270,6 +270,15 @@ def _download(symbols: list[str], period: str, chunk: int) -> tuple[dict[str, pd
     return frames, failed
 
 
+def behind_bench(row_dates: list[str], bench_date: str | None, share: float = 0.5) -> tuple[int, bool]:
+    """Quantos ativos terminam antes do último pregão do benchmark e se isso é a maioria (barra do dia faltando
+    no Yahoo, como na janela depois das 20:00 ET para as ações dos EUA)."""
+    if not bench_date or not row_dates:
+        return 0, False
+    behind = sum(1 for d in row_dates if d < bench_date)
+    return behind, behind > share * len(row_dates)
+
+
 def rsi_wilder(close: pd.Series, n: int = 14) -> pd.Series:
     d = close.diff()
     up = d.clip(lower=0).ewm(alpha=1 / n, adjust=False, min_periods=n).mean()
@@ -509,6 +518,12 @@ def main() -> int:
     for x in rows:
         x.pop("_df", None)
     last_dates = sorted({x["date"] for x in rows})
+    bench_date = bench.index[-1].strftime("%Y-%m-%d") if bench is not None and len(bench) else None
+    behind, stale = behind_bench([x["date"] for x in rows], bench_date)
+    if stale:  # anotação no resumo do run; os dados saem assim mesmo (dataDate = pregão anterior), sem inventar barra
+        msg = f"[{args.market}] {behind}/{len(rows)} ativos sem a barra de {bench_date} (o {bench_sym} já tem): Yahoo atrasado"
+        log.warning(msg)
+        print(f"::warning::{msg}", flush=True)
     liq_default = float(ucfg.get("liq21_min_usd", 50_000_000)) if us else cfg.get("filters", {}).get("liq21_min_brl", 5_000_000)
     payload = {
         "schema": 2,

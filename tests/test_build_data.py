@@ -5,6 +5,19 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 import build_data as bd
 
 
+class BehindBenchTests(unittest.TestCase):
+    def test_maioria_sem_a_barra_do_benchmark(self):
+        # 20/10 22:08 BRT: 502 ações com barra de 19/10 e ^GSPC com 20/10
+        self.assertEqual(bd.behind_bench(["2026-10-19"] * 502, "2026-10-20"), (502, True))
+
+    def test_poucos_atrasados_nao_alertam(self):
+        self.assertEqual(bd.behind_bench(["2026-10-20"] * 501 + ["2026-10-19"], "2026-10-20"), (1, False))
+
+    def test_sem_benchmark(self):
+        self.assertEqual(bd.behind_bench(["2026-10-19"], None), (0, False))
+        self.assertEqual(bd.behind_bench([], "2026-10-20"), (0, False))
+
+
 class IndicatorTests(unittest.TestCase):
     def frame(self, closes):
         idx = pd.bdate_range("2025-01-01", periods=len(closes))

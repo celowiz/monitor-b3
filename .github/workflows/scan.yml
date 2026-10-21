@@ -16,6 +16,10 @@ on:
     # NYSE 9:30–16:00 ET: em EDT já coberto acima; em EST (nov–mar) fecha 18:00 BRT.
     - cron: "34 20 * * 1-5" # 17:34 BRT
     - cron: "4,34 21 * * 1-5" # 18:04/18:34 BRT (fechamento NYSE no horário padrão)
+    # Rodada tardia (23:47 BRT): das 20:00 ET (fim do after-market) até ~1h20 depois o Yahoo devolve as ações
+    # dos EUA sem a barra diária do pregão (os índices não são afetados). Os runs atrasados que caem nessa janela
+    # publicam o pregão anterior; este cron, depois da janela em EDT e EST, deixa o dia fechado com a barra certa.
+    - cron: "47 2 * * 2-6" # 23:47 BRT
   workflow_dispatch:
     inputs:
       force:
