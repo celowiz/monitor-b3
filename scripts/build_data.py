@@ -126,9 +126,17 @@ def index_constituents(index: str) -> list[str]:
     q = base64.b64encode(json.dumps({"language": "pt-br", "pageNumber": 1, "pageSize": 300,
                                      "index": index, "segment": "1"}).encode()).decode()
     try:
-        r = requests.get(f"https://sistemaswebb3-listados.b3.com.br/indexProxy/indexCall/GetPortfolioDay/{q}", timeout=30)
-        r.raise_for_status()
-        d = r.json()
+        for attempt in range(3):  # a API da B3 falha de forma intermitente: esperas de 3 e 9 s antes do cache
+            try:
+                r = requests.get(f"https://sistemaswebb3-listados.b3.com.br/indexProxy/indexCall/GetPortfolioDay/{q}", timeout=30)
+                r.raise_for_status()
+                d = r.json()
+                break
+            except Exception as e:
+                if attempt == 2:
+                    raise
+                log.info("carteira %s B3: tentativa %d falhou (%s)", index, attempt + 1, e)
+                time.sleep(3 * 3 ** attempt)
         ticks = sorted(x["cod"].strip().upper() for x in d.get("results") or [] if x.get("cod"))
         if len(ticks) > 30:
             _INDEX_CACHE[index] = {"source": "B3 indexProxy GetPortfolioDay (carteira do dia)", "date": d["header"]["date"], "tickers": ticks}
@@ -520,6 +528,7 @@ def main() -> int:
         "bdrAllowlist": [] if us else cfg.get("bdr_allowlist", []),
         "benchmark": {"name": "S&P 500" if us else "Ibovespa", "symbol": bench_sym,
                       "ret21": r(bench_ret21, 5), "price": r(bench["Close"].iloc[-1], 2) if bench is not None else None,
+                      "date": bench.index[-1].date().isoformat() if bench is not None and len(bench) else None,
                       "ifixProxy": ifix_proxy.replace(".SA", "") if ifix_proxy else None, "ifixRet21": r(ifix_ret21, 5),
                       "chg": r(chg_of(bench_sym), 5), "ifixChg": r(chg_of(ifix_proxy), 5)},
         "universeCount": len(tickers),

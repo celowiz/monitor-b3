@@ -9,12 +9,13 @@ on:
     branches: [main]
   schedule:
     # B3 session ~10:30–17:00 America/Sao_Paulo (UTC-3, no DST) on weekdays.
-    - cron: "30 13 * * 1-5" # 10:30 BRT
-    - cron: "0,30 14-19 * * 1-5" # 11:00–16:30 BRT
-    - cron: "0 20 * * 1-5" # 17:00 BRT
+    # Minutos :04/:34 em vez de :00/:30 (horários mais disputados no GitHub Actions, que atrasam até 2–3 h).
+    - cron: "34 13 * * 1-5" # 10:34 BRT
+    - cron: "4,34 14-19 * * 1-5" # 11:04–16:34 BRT
+    - cron: "4 20 * * 1-5" # 17:04 BRT
     # NYSE 9:30–16:00 ET: em EDT já coberto acima; em EST (nov–mar) fecha 18:00 BRT.
-    - cron: "30 20 * * 1-5" # 17:30 BRT
-    - cron: "0,30 21 * * 1-5" # 18:00/18:30 BRT (fechamento NYSE no horário padrão)
+    - cron: "34 20 * * 1-5" # 17:34 BRT
+    - cron: "4,34 21 * * 1-5" # 18:04/18:34 BRT (fechamento NYSE no horário padrão)
   workflow_dispatch:
     inputs:
       force:
