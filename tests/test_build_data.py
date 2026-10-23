@@ -78,3 +78,28 @@ class IndicatorTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class LastQuoteTests(unittest.TestCase):
+    def _with(self, meta=None, exc=None):
+        from unittest import mock
+
+        class T:
+            def __init__(self, sym): pass
+            def history(self, **kw):
+                if exc: raise exc
+                return pd.DataFrame()
+            def get_history_metadata(self): return meta
+
+        with mock.patch.object(bd.yf, "Ticker", T), mock.patch.object(bd.time, "sleep", lambda s: None):
+            return bd.last_quote_at("^BVSP")
+
+    def test_converte_para_brt(self):
+        ts = pd.Timestamp("2026-10-22 16:31:48", tz="America/New_York").to_pydatetime()
+        self.assertEqual(self._with({"regularMarketTime": ts}), "2026-10-22T17:31:48-03:00")
+        self.assertEqual(self._with({"regularMarketTime": 1792700000}), pd.Timestamp(1792700000, unit="s", tz="UTC").tz_convert("America/Sao_Paulo").isoformat())
+
+    def test_sem_dado_nao_inventa(self):
+        self.assertIsNone(self._with({}))
+        self.assertIsNone(self._with(None))
+        self.assertIsNone(self._with(exc=RuntimeError("yahoo fora")))

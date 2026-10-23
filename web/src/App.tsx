@@ -15,6 +15,7 @@ import { DEFS, Evaluated, Latest, Screen, blockSummary, defaultScreen, evaluate,
 import Alerts from "./Alerts";
 import BacktestView from "./Backtest";
 import { loadWatch, saveWatch, toggleWatch } from "./watch";
+import { sessionInfo } from "./session";
 
 const roFromHash = (h: string) => new URLSearchParams(h.replace(/^#/, "")).get("ro") === "1";
 
@@ -28,6 +29,25 @@ const clone = (s: Screen): Screen => JSON.parse(JSON.stringify(s));
 function fmtRun(iso: string) {
   const d = new Date(iso);
   return d.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }) + " BRT";
+}
+
+const ddmm = (d: string | null | undefined) => (d ? d.split("-").reverse().slice(0, 2).join("/") : "—");
+
+/** Selo do pregão: "Intradiário · parcial" (com hora da última cotação em BRT e aviso de atraso) até a rodada de fechamento. */
+function SessionBadge({ latest, market, wide }: { latest: Latest; market: MarketId; wide: boolean }) {
+  const s = sessionInfo(market, latest);
+  const idx = market === "us" ? "S&P 500" : "Ibovespa";
+  if (!s.intraday)
+    return <span className="sess sess-final" title={`Pregão de ${ddmm(s.dataDate)} fechado (fechamento regular ${s.closeBrt} BRT)`}><i className="dot" />Fechamento <b>{ddmm(s.dataDate)}</b></span>;
+  const q = s.lastQuoteBrt ? `${s.lastQuoteBrt} BRT` : "—";
+  const tip = `Pregão de ${ddmm(s.dataDate)} em andamento: valores do dia parciais até o fechamento (${s.closeBrt} BRT). ` +
+    `Última cotação do ${idx}: ${q}. Cotações do Yahoo podem ter atraso de ~15 min.`;
+  return (
+    <span className="sess sess-live" title={tip} role="status">
+      <i className="dot" /><b>Intradiário · parcial</b>
+      <span> · última cotação {q}</span><span className="mu"> · atraso ~15 min</span>
+    </span>
+  );
 }
 
 function MobilePipeline({ screen, ev, sectors, tree, onChange, readOnly = false }: { screen: Screen; ev: Evaluated; sectors: string[]; tree: Record<string, string[]>; onChange: (s: Screen) => void; readOnly?: boolean }) {
@@ -267,9 +287,9 @@ export default function App() {
           </div></div>
         {latest && (
           <div className="meta mono">
-            <span><i className="dot" />Rodada <b>{fmtRun(latest.generatedAt)}</b></span>
+            <SessionBadge latest={latest} market={market} wide={wide} />
+            {wide && <span>Rodada <b>{fmtRun(latest.generatedAt)}</b></span>}
             {wide && <span>Fonte <b>{market === "us" ? "Wikipedia + yfinance" : "brapi + yfinance"}</b></span>}
-            {wide && <span title={latest.delayNote}>Atraso <b>~30 min</b></span>}
             <span>Universo <b>{latest.universeCount}</b>{wide ? " ativos" : ""}</span>
             <span className={latest.failedTickers.length ? "st-partial" : "st-ok"} title={latest.failedTickers.join(", ")}>
               {latest.failedTickers.length ? `parcial · ${latest.failedTickers.length} falha(s)` : "ok"}</span>
@@ -331,8 +351,8 @@ export default function App() {
 
       <footer className="foot">
         <b>Conteúdo educativo, não é recomendação de investimento.</b>
-        {latest && market === "us" && <span> Rodada {fmtRun(latest.generatedAt)} · barra de {latest.dataDate?.split("-").reverse().join("/")} (provisória durante o pregão) · preços yfinance diário com dividendos reinvestidos (retorno total), em US$ · universo S&P 500 e setores GICS (Wikipedia, lista em cache com data {latest.indexes?.SP500?.date ?? "—"}) · RS vs S&P 500 (^GSPC) · calendário NYSE. Máx./mín. 52s = 252 pregões excluindo hoje.</span>}
-        {latest && market === "br" && <span> Rodada {fmtRun(latest.generatedAt)} · barra de {latest.dataDate?.split("-").reverse().join("/")} (provisória durante o pregão) · preços yfinance diário em retorno total (proventos e desdobramentos conferidos com a B3) · universo e setores brapi.dev · IFIX: carteira B3 · RS: Ibovespa (^BVSP); FIIs vs IFIX (proxy {latest.benchmark.ifixProxy ?? "XFIX11"}). Máx./mín. 52s = 252 pregões excluindo hoje.</span>}
+        {latest && market === "us" && <span> Rodada {fmtRun(latest.generatedAt)} · barra de {latest.dataDate?.split("-").reverse().join("/")} ({sessionInfo(market, latest).intraday ? `parcial: pregão em andamento, última cotação ${sessionInfo(market, latest).lastQuoteBrt ?? "—"} BRT` : "fechamento"}) · cotações com atraso de ~15 min · preços yfinance diário com dividendos reinvestidos (retorno total), em US$ · universo S&P 500 e setores GICS (Wikipedia, lista em cache com data {latest.indexes?.SP500?.date ?? "—"}) · RS vs S&P 500 (^GSPC) · calendário NYSE. Máx./mín. 52s = 252 pregões excluindo hoje.</span>}
+        {latest && market === "br" && <span> Rodada {fmtRun(latest.generatedAt)} · barra de {latest.dataDate?.split("-").reverse().join("/")} ({sessionInfo(market, latest).intraday ? `parcial: pregão em andamento, última cotação ${sessionInfo(market, latest).lastQuoteBrt ?? "—"} BRT` : "fechamento"}) · cotações com atraso de ~15 min · preços yfinance diário em retorno total (proventos e desdobramentos conferidos com a B3) · universo e setores brapi.dev · IFIX: carteira B3 · RS: Ibovespa (^BVSP); FIIs vs IFIX (proxy {latest.benchmark.ifixProxy ?? "XFIX11"}). Máx./mín. 52s = 252 pregões excluindo hoje.</span>}
         {" "}<a href="https://github.com/celowiz/monitor-b3" onClick={() => trackOutbound("code", "https://github.com/celowiz/monitor-b3", "código")}>código</a>
       </footer>
     </div>

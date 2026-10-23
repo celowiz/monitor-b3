@@ -8,14 +8,13 @@ on:
   push:
     branches: [main]
   schedule:
-    # B3 session ~10:30–17:00 America/Sao_Paulo (UTC-3, no DST) on weekdays.
-    # Minutos :04/:34 em vez de :00/:30 (horários mais disputados no GitHub Actions, que atrasam até 2–3 h).
-    - cron: "34 13 * * 1-5" # 10:34 BRT
-    - cron: "4,34 14-19 * * 1-5" # 11:04–16:34 BRT
-    - cron: "4 20 * * 1-5" # 17:04 BRT
-    # NYSE 9:30–16:00 ET: em EDT já coberto acima; em EST (nov–mar) fecha 18:00 BRT.
-    - cron: "34 20 * * 1-5" # 17:34 BRT
-    - cron: "4,34 21 * * 1-5" # 18:04/18:34 BRT (fechamento NYSE no horário padrão)
+    # A cada 30 min nos dias úteis, 10:04–18:34 America/Sao_Paulo (UTC-3, sem horário de verão): cobre o pregão da B3
+    # (10:00–17:00 BRT com NY em EDT; 10:00–18:00 a partir de 03/11/2026, com NY em EST) e o da NYSE (9:30–16:00 ET =
+    # 10:30–17:00 BRT em EDT, 11:30–18:00 em EST). Durante o pregão os números do dia são parciais (intraday=true no
+    # summary.json e selo "Intradiário · parcial" na página) até a rodada de fechamento (fechamento + 30 min).
+    # Minutos :04/:34 em vez de :00/:30 (horários mais disputados no GitHub Actions, que atrasam até 2–3 h) e sem colidir
+    # com os outros repos (rrg :07, hmm :13, pairs :17, setores :09/:39, mercado-hoje :11/:41).
+    - cron: "4,34 13-21 * * 1-5" # 10:04–18:34 BRT (18:04/18:34 = fechamento da B3 e da NYSE no horário padrão dos EUA)
     # Rodada tardia (23:47 BRT): das 20:00 ET (fim do after-market) até ~1h20 depois o Yahoo devolve as ações
     # dos EUA sem a barra diária do pregão (os índices não são afetados). Os runs atrasados que caem nessa janela
     # publicam o pregão anterior; este cron, depois da janela em EDT e EST, deixa o dia fechado com a barra certa.
@@ -50,7 +49,7 @@ jobs:
           cache: pip
       - run: pip install -r requirements.txt
       - name: Unit tests (indicadores + screener legado)
-        run: python -m unittest tests.test_build_data tests.test_history tests.test_adjust tests.test_panel tests.test_screener_chart tests.test_screener_filters -v
+        run: python -m unittest tests.test_build_data tests.test_fingerprint tests.test_history tests.test_adjust tests.test_panel tests.test_screener_chart tests.test_screener_filters -v
       - uses: actions/setup-node@v7
         with:
           node-version: "24"
@@ -65,6 +64,7 @@ jobs:
     timeout-minutes: 30
     outputs:
       skip: ${{ steps.cal.outputs.skip }}
+      same: ${{ steps.fp.outputs.same }}
     env:
       PYTHONUNBUFFERED: "1"
       # PR/branch: sempre roda (validação); main: respeita o calendário B3.
@@ -91,7 +91,7 @@ jobs:
         run: pip install -r requirements.txt
       - name: Unit tests
         if: steps.cal.outputs.skip != 'true'
-        run: python -m unittest tests.test_b3_calendar tests.test_nyse_calendar tests.test_build_data tests.test_history tests.test_adjust tests.test_panel -v
+        run: python -m unittest tests.test_b3_calendar tests.test_nyse_calendar tests.test_build_data tests.test_fingerprint tests.test_history tests.test_adjust tests.test_panel -v
 
       # Eventos de ações da B3 (grupamentos/desdobramentos), por emissor, renovados a cada ~20 h (scripts/adjust.py).
       - name: Cache eventos B3
@@ -149,10 +149,27 @@ jobs:
         if: steps.cal.outputs.skip != 'true'
         run: test -f web/dist/index.html && test -f web/dist/data/latest.json && test -f web/dist/data/latest_br.json
 
+      # Rodadas agendadas que trazem exatamente os mesmos números da publicação anterior (ex.: depois do fechamento)
+      # não republicam: compara a impressão digital dos dados (sem a hora da rodada) com a do site no ar.
+      # Push na main e workflow_dispatch sempre publicam (mudança de código).
+      - name: Dados mudaram desde a última publicação?
+        id: fp
+        if: steps.cal.outputs.skip != 'true'
+        run: |
+          new=$(python3 scripts/fingerprint.py web/dist/data)
+          echo "$new" > web/dist/data/fingerprint.txt
+          old=$(curl -fsS --max-time 15 --retry 2 "https://celowiz.github.io/monitor-b3/data/fingerprint.txt?t=$(date +%s)" 2>/dev/null || true)
+          if [ "${{ github.event_name }}" = "schedule" ] && [ -n "$old" ] && [ "$old" = "$new" ]; then
+            echo "same=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::dados iguais aos publicados ($new); sem novo deploy"
+          else
+            echo "same=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: actions/configure-pages@v6
-        if: steps.cal.outputs.skip != 'true' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        if: steps.cal.outputs.skip != 'true' && steps.fp.outputs.same != 'true' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
       - uses: actions/upload-pages-artifact@v5
-        if: steps.cal.outputs.skip != 'true' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        if: steps.cal.outputs.skip != 'true' && steps.fp.outputs.same != 'true' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
         with:
           path: web/dist
       # Fora da main: só valida e guarda o build como artefato comum (sem publicar).
@@ -165,7 +182,7 @@ jobs:
 
   deploy:
     needs: scan
-    if: needs.scan.result == 'success' && needs.scan.outputs.skip != 'true' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    if: needs.scan.result == 'success' && needs.scan.outputs.skip != 'true' && needs.scan.outputs.same != 'true' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
