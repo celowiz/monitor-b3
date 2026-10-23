@@ -37,7 +37,9 @@ export interface Latest {
   market?: Market; currency?: string; history?: SignalHistory;
   /** correções da série de preços (scripts/adjust.py): ticker → eventos corrigidos / quebras */
   adjustments?: { corrected: Record<string, { date: string; kind: string; jump: number; factor: number | null; note: string }[]>; b3Issuers?: number };
-  generatedAt: string; dataDate: string | null; delayNote: string; universeCount: number;
+  generatedAt: string; dataDate: string | null; delayNote: string;
+  /** última cotação do índice de referência (regularMarketTime do Yahoo, ISO com fuso); null se indisponível */
+  lastQuoteAt?: string | null; universeCount: number;
   failedTickers: string[]; bdrAllowlist: string[]; benchmark: { ret21: number | null; price: number | null; ifixProxy?: string; ifixRet21?: number | null };
   indexes?: Record<string, { date: string | null; count: number }>; defaults: { liq21MinBrl: number }; tickers: Row[];
 }

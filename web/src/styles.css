@@ -139,6 +139,8 @@ tbody tr{cursor:pointer}tbody tr:hover{background:var(--bg2)}tbody tr.sel{backgr
 tbody tr,.card{animation:rowin .32s ease both}
 @keyframes rowin{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
 .st-ok{color:#3fbf7f}.st-partial{color:var(--amb)}
+.sess{white-space:nowrap}.sess-live{color:var(--amb)}.sess-live b{color:var(--amb);font-weight:600}.sess-live .dot{background:var(--amb);box-shadow:0 0 6px var(--amb);animation:blink 1.6s ease-in-out infinite}.sess-live .mu{color:var(--mu)}
+.app.mobile .sess{white-space:normal}
 .scroll-hint{position:absolute;left:calc(50% + 85px);bottom:10px;transform:translateX(-50%);z-index:6;display:inline-flex;align-items:center;gap:6px;padding:5px 12px;font:inherit;font-size:12px;color:var(--tx);background:var(--bg3);border:1px solid var(--line2);border-radius:999px;cursor:pointer;opacity:.92;transition:opacity .3s,border-color .2s}
 .scroll-hint:hover,.scroll-hint:focus-visible{border-color:var(--teal);opacity:1}.scroll-hint b{color:var(--teal);font-weight:500}
 .scroll-hint svg{animation:hintbob 1.6s ease-in-out infinite}.scroll-hint.gone{opacity:0;pointer-events:none}

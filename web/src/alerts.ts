@@ -30,14 +30,8 @@ export function alertProblems(d: AlertDef): string[] {
   return out;
 }
 
-/** Fechamento já saiu? BR: após 17:30 BRT; EUA: após 18:15 BRT (17:00 ET + atraso), ou dado de pregão anterior. */
-export function isClosingRun(market: Market, generatedAt: string, dataDate: string | null): boolean {
-  if (!dataDate) return false;
-  const brt = new Date(new Date(generatedAt).getTime() - 3 * 3600_000);
-  const today = brt.toISOString().slice(0, 10), mins = brt.getUTCHours() * 60 + brt.getUTCMinutes();
-  if (dataDate < today) return true;
-  return mins >= (market === "us" ? 18 * 60 + 15 : 17 * 60 + 30);
-}
+/** Fechamento já saiu? Regras (com a grade de verão/inverno da B3 e NYSE) em session.ts. */
+export { isClosingRun } from "./session";
 
 export function step(d: AlertDef, rows: Row[], date: string, prev: AlertState | null, checkedAt: string): AlertState {
   const ev = evaluate(d.screen, rows);

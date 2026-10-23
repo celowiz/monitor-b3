@@ -34,12 +34,18 @@ describe("summary", () => {
     expect(s.top[0]).toEqual({ t: "AAAA3", chg: 0.05 });
     expect(s.bottom[0]).toEqual({ t: "BBBB3", chg: -0.2 });
     expect(s.final).toBe(true);
+    expect(s.intraday).toBe(false);
     expect(s.bench).toMatchObject({ price: 208295.98, chg: 0.01569, ifix_proxy: "XFIX11" });
     expect(s.us).toBeNull();
   });
   it("rodada intradiária não é final; determinístico e pequeno", () => {
     const a = marketSummary(L(rows, { generatedAt: "2026-10-20T13:00:00-03:00" }));
     expect(a.final).toBe(false);
+    expect(a.intraday).toBe(true);
+    expect(a.as_of_ts).toBe("2026-10-20T13:00:00-03:00"); // sem lastQuoteAt: hora da rodada
+    expect(a.last_quote_at).toBeNull();
+    const q = marketSummary(L(rows, { generatedAt: "2026-10-20T13:05:00-03:00", lastQuoteAt: "2026-10-20T12:49:00-03:00" }));
+    expect(q).toMatchObject({ intraday: true, final: false, as_of: "2026-10-20", as_of_ts: "2026-10-20T12:49:00-03:00", quote_delay_min: 15 });
     expect(JSON.stringify(marketSummary(L(rows, { generatedAt: "2026-10-20T13:00:00-03:00" })))).toBe(JSON.stringify(a));
     const many = Array.from({ length: 600 }, (_, i) => R({ t: `T${String(i).padStart(3, "0")}3`, chg: 0.01, price: 13, high52: 12, volRatio: 5, rsi: 75, rsiPrev: 60 }));
     const big = marketSummary(L(many));
@@ -50,7 +56,7 @@ describe("summary", () => {
   it("S&P 500 usa a data do próprio benchmark", () => {
     const us = (date?: string) => L(rows, { dataDate: "2026-10-19", generatedAt: "2026-10-20T22:08:05-03:00",
       benchmark: { name: "S&P 500", symbol: "^GSPC", price: 7712.57, chg: 0.00284, ret21: -0.00671, ...(date ? { date } : {}) } as Latest["benchmark"] });
-    expect(marketSummary(L(rows), us("2026-10-20")).us).toMatchObject({ as_of: "2026-10-20", bench: { price: 7712.57 } });
+    expect(marketSummary(L(rows), us("2026-10-20")).us).toMatchObject({ as_of: "2026-10-20", intraday: false, final: true, bench: { price: 7712.57 } });
     expect(marketSummary(L(rows), us()).us?.as_of).toBe("2026-10-19"); // dados antigos sem "date"
   });
 });

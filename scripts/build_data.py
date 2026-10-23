@@ -270,6 +270,25 @@ def _download(symbols: list[str], period: str, chunk: int) -> tuple[dict[str, pd
     return frames, failed
 
 
+def last_quote_at(sym: str, tries: int = 2) -> str | None:
+    """Horário da última cotação do índice (regularMarketTime do Yahoo), em BRT. None se não vier: nunca inventa."""
+    for attempt in range(tries):
+        try:
+            t = yf.Ticker(sym)
+            t.history(period="1d", interval="1d")
+            ts = (t.get_history_metadata() or {}).get("regularMarketTime")
+            if ts is not None:
+                ts = pd.Timestamp(ts, unit="s", tz="UTC") if isinstance(ts, (int, float)) else pd.Timestamp(ts)
+                if ts.tzinfo is None:
+                    ts = ts.tz_localize("UTC")
+                return ts.tz_convert(TZ).to_pydatetime().isoformat(timespec="seconds")
+        except Exception as e:  # noqa: BLE001
+            log.warning("última cotação de %s indisponível (tentativa %d): %s", sym, attempt + 1, e)
+        if attempt + 1 < tries:
+            time.sleep(3)
+    return None
+
+
 def behind_bench(row_dates: list[str], bench_date: str | None, share: float = 0.5) -> tuple[int, bool]:
     """Quantos ativos terminam antes do último pregão do benchmark e se isso é a maioria (barra do dia faltando
     no Yahoo, como na janela depois das 20:00 ET para as ações dos EUA)."""
@@ -537,7 +556,8 @@ def main() -> int:
                      "prices": "yfinance diário bruto + proventos; eventos B3 (sistemaswebb3-listados); total-return refeito em adjust.py",
                      "benchmark": "^BVSP"}),
         "adjustments": {"corrected": corrected, "b3Issuers": len({t_[:4] for t_ in b3_events}) if b3_events else 0},
-        "delayNote": "até ~30 min (GitHub Actions) + atraso do Yahoo; barra de hoje é provisória durante o pregão",
+        "delayNote": "cotações com atraso de ~15 min (Yahoo) + até ~30 min entre rodadas do GitHub Actions; a barra de hoje é parcial durante o pregão",
+        "lastQuoteAt": last_quote_at(bench_sym),
         "lookback52": LOOKBACK,
         "defaults": {"liq21MinBrl": liq_default},
         "bdrAllowlist": [] if us else cfg.get("bdr_allowlist", []),

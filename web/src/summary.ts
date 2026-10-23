@@ -5,7 +5,7 @@
 // Determinístico: listas ordenadas por valor e, no empate, pelo ticker.
 import { DEFS, signalHit, type Block, type BlockType, type Latest, type Row } from "./engine";
 import { breadth } from "./signals";
-import { isClosingRun } from "./alerts";
+import { sessionInfo } from "./session";
 
 export const SUMMARY_SCHEMA = 1;
 const LIST_MAX = 12;
@@ -26,7 +26,12 @@ export function universeRows(latest: Latest): Row[] {
   return latest.tickers.filter((r) => r.kind === "acao" && (r.liq21 ?? 0) >= min && r.price != null);
 }
 
+/** Atraso típico das cotações do Yahoo (min); informativo para quem lê o resumo. */
+export const QUOTE_DELAY_MIN = 15;
+
 export function marketSummary(br: Latest, us?: Latest | null) {
+  const sb = sessionInfo("br", br);
+  const su = us ? sessionInfo("us", us) : null;
   const rows = universeRows(br);
   const b = breadth(rows);
   const bench = br.benchmark as Latest["benchmark"] & { chg?: number | null; ifixChg?: number | null; name?: string; symbol?: string };
@@ -37,9 +42,15 @@ export function marketSummary(br: Latest, us?: Latest | null) {
     project: "monitor-b3",
     url: "https://celowiz.github.io/monitor-b3/",
     as_of: br.dataDate,
+    /** data + hora dos números: última cotação do Ibovespa (Yahoo) ou, se ela não vier, a hora da rodada */
+    as_of_ts: sb.lastQuoteAt ?? br.generatedAt,
     generated_at: br.generatedAt,
-    /** true quando a rodada é a de fechamento (≥ 17:30 BRT ou pregão anterior); senão a barra do dia é provisória */
-    final: isClosingRun("br", br.generatedAt, br.dataDate),
+    last_quote_at: sb.lastQuoteAt,
+    quote_delay_min: QUOTE_DELAY_MIN,
+    /** true até a rodada de fechamento: os valores do dia são parciais */
+    intraday: sb.intraday,
+    /** true quando a rodada é a de fechamento (B3 fechada + 30 min ou pregão anterior); sempre === !intraday */
+    final: !sb.intraday,
     bench: {
       name: bench.name ?? "Ibovespa", symbol: bench.symbol ?? "^BVSP", price: r2(bench.price), chg: r5(bench.chg), ret21: r5(bench.ret21),
       ifix_proxy: bench.ifixProxy ?? null, ifix_chg: r5(bench.ifixChg), ifix_ret21: r5(bench.ifixRet21),
@@ -59,7 +70,8 @@ export function marketSummary(br: Latest, us?: Latest | null) {
     bottom: sorted.slice(-5).reverse().map((r) => ({ t: r.t, chg: r5(r.chg) })),
     us: us && usBench
       ? { // data do próprio ^GSPC: pode ser mais nova que a das ações dos EUA (dataDate) quando o Yahoo atrasa as barras delas
-          as_of: usBench.date ?? us.dataDate, generated_at: us.generatedAt, final: isClosingRun("us", us.generatedAt, us.dataDate),
+          as_of: usBench.date ?? us.dataDate, as_of_ts: su!.lastQuoteAt ?? us.generatedAt, generated_at: us.generatedAt,
+          last_quote_at: su!.lastQuoteAt, intraday: su!.intraday, final: !su!.intraday,
           bench: { name: "S&P 500", symbol: "^GSPC", price: r2(usBench.price), chg: r5(usBench.chg), ret21: r5(usBench.ret21) } }
       : null,
   };
