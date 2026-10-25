@@ -262,7 +262,7 @@ export const addFromPalette = (t: BlockType) => document.getElementById("mb3-can
 export function Palette({ onAdd, hasResult }: { onAdd: (t: BlockType) => void; hasResult: boolean }) {
   const groups: [string, BlockType[]][] = [["Entrada", ["universe"]], ["Filtros", FILTER_TYPES.slice(1)], ["Sinais", SIGNAL_TYPES], ["Lógica", ["and", "or"]], ["Saída", ["result"]]];
   return (
-    <aside className="palette">
+    <aside className="palette" tabIndex={0} aria-label="Paleta de blocos">
       <div className="pal-t">Blocos · arraste</div>
       {groups.map(([g, ts]) => (
         <div key={g}>
@@ -270,7 +270,7 @@ export function Palette({ onAdd, hasResult }: { onAdd: (t: BlockType) => void; h
           {ts.map((t) => {
             const dis = t === "result" && hasResult;
             return (
-              <div key={t} className={"pal-i" + (dis ? " dis" : "")} draggable={!dis} title={dis ? "o grafo já tem um Resultado" : "arraste para o canvas ou clique"}
+              <div key={t} className={"pal-i" + (dis ? " dis" : "")} draggable={!dis} aria-disabled={dis || undefined} title={dis ? "o grafo já tem um Resultado" : "arraste para o canvas ou clique"}
                 onDragStart={(e) => { e.dataTransfer.setData("application/x-block", t); e.dataTransfer.effectAllowed = "move"; }}
                 onClick={() => !dis && onAdd(t)}>
                 <span className="pal-ic">{DEFS[t].icon}</span>{DEFS[t].short}

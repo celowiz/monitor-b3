@@ -2,13 +2,15 @@
 
 Painel educacional em blocos (estilo n8n, React Flow) para montar telas de **ações (incl. units), BDRs da allowlist, ETFs e FIIs do IFIX** combinando filtros e sinais. Toda a filtragem roda no navegador.
 
-**Site:** https://celowiz.github.io/monitor-b3/
+**▶ Abrir o app: [celowiz.github.io/monitor-b3](https://celowiz.github.io/monitor-b3/)**
+
+[![Monitor B3: construtor de telas em blocos](docs/screenshot.png)](https://celowiz.github.io/monitor-b3/)
 
 **Conteúdo educativo, não é recomendação de investimento.**
 
 ## Arquitetura (custo zero)
 
-- `scripts/build_data.py` (GitHub Actions, a cada 30 min nos dias úteis das 10:04 às 18:34 BRT + rodada tardia às 23:47 BRT; pula dias sem pregão na B3 e na NYSE via `b3_calendar.py`/`nyse_calendar.py`) gera:
+- `scripts/build_data.py` (GitHub Actions, agendado a cada 30 min nos dias úteis das 10:04 às 18:34 BRT + rodada tardia às 23:47 BRT; na prática atualiza várias vezes por dia no pregão, porque o GitHub atrasa e descarta crons, veja [Horários](#horários-dias-úteis); pula dias sem pregão na B3 e na NYSE via `b3_calendar.py`/`nyse_calendar.py`) gera:
   - `data/latest.json`: universo + indicadores por ticker, `failedTickers`, horário da rodada e `lastQuoteAt` (hora da última cotação do índice no Yahoo).
   - `data/candles/<TICKER>.json`: ~1 ano de candles diários + SMA50/SMA200/máx. 52s, carregado sob demanda.
   - `data/summary.json` (`web/scripts/summary.ts`, ~2 KB): amplitude e sinais do dia das ações líquidas da B3 (mesmas regras do app), lido pela página [Mercado Hoje](https://celowiz.github.io/mercado-hoje/) do portfólio. Campos de horário: `as_of` (data da barra), `as_of_ts` (data e hora: última cotação do índice ou, se ela não vier, a hora da rodada), `last_quote_at`, `quote_delay_min` (15) e `intraday` (`true` até a rodada de fechamento; `final` = `!intraday`).
@@ -21,10 +23,10 @@ Painel educacional em blocos (estilo n8n, React Flow) para montar telas de **aç
 
 | BRT (America/Sao_Paulo) | cron (UTC) | O quê |
 | --- | --- | --- |
-| 10:04, 10:34, …, 18:04, 18:34 (a cada 30 min) | `4,34 13-21 * * 1-5` | pregão da B3 e da NYSE: números do dia **parciais** (selo "Intradiário · parcial") até a rodada de fechamento |
+| 10:04, 10:34, …, 18:04, 18:34 (agendado a cada 30 min) | `4,34 13-21 * * 1-5` | pregão da B3 e da NYSE: números do dia **parciais** (selo "Intradiário · parcial") até a rodada de fechamento |
 | 23:47 | `47 2 * * 2-6` | rodada tardia: barra diária das ações dos EUA, que o Yahoo atrasa depois das 20:00 ET |
 
-Fechamento regular em BRT: B3 e NYSE às 17:00 com Nova York em horário de verão (mar–nov) e às 18:00 no horário padrão (B3 a partir de 03/11/2026). A rodada conta como fechamento a partir de fechamento + 30 min (EUA: nunca antes de 18:15). O GitHub pode atrasar crons em horário de pico.
+Fechamento regular em BRT: B3 e NYSE às 17:00 com Nova York em horário de verão (mar–nov) e às 18:00 no horário padrão (B3 a partir de 03/11/2026). A rodada conta como fechamento a partir de fechamento + 30 min (EUA: nunca antes de 18:15). O GitHub atrasa e descarta crons em horário de pico: em 23/10/2026, por exemplo, só 3 rodadas do pregão rodaram (14:50, 18:19 e 20:57 BRT) e a tardia saiu às 04:57 do dia seguinte. Por isso o site fala em "várias vezes por dia", não em "a cada 30 min".
 
 ## Universo
 
@@ -71,3 +73,6 @@ cd web && npm ci && npm run dev
 Workflow: `.github/workflows/scan.yml` (PRs e branches só validam e guardam o build como artefato; deploy no Pages só a partir da `main`).
 
 O `screener.py` legado (rompimento de 52s com PNGs) continua no repo para o monitor local, mas não é mais publicado no Pages.
+
+## Licença
+Código sob licença [MIT](LICENSE). Dados do Yahoo Finance e da B3 seguem os termos das fontes.

@@ -49,12 +49,12 @@ export function BlockEditor({ block, sectors, tree = {}, onParams }: Props) {
     case "sector":
       return (
         <div className="col nodrag">
-          <select className="ed-sel nodrag nowheel" multiple size={4} value={p.sectors}
+          <select className="ed-sel nodrag nowheel" multiple size={4} value={p.sectors} aria-label="Setores"
             onChange={(e) => onParams({ sectors: Array.from(e.target.selectedOptions).map((o) => o.value), subsectors: [] })}>
             {sectors.map((s) => <option key={s} value={s}>{s}</option>)}
           </select>
           {p.sectors?.length > 0 && subsectors.length > 0 && (
-            <select className="ed-sel nodrag nowheel" multiple size={4} value={p.subsectors}
+            <select className="ed-sel nodrag nowheel" multiple size={4} value={p.subsectors} aria-label="Subsetores"
               onChange={(e) => onParams({ subsectors: Array.from(e.target.selectedOptions).map((o) => o.value) })}>
               {subsectors.map((s) => <option key={s} value={s}>{s}</option>)}
             </select>
@@ -68,7 +68,7 @@ export function BlockEditor({ block, sectors, tree = {}, onParams }: Props) {
       const idx = steps.reduce((b, v, i) => (Math.abs(v - mi) < Math.abs(steps[b] - mi) ? i : b), 0);
       return (
         <div className="col nodrag">
-          <input className="slider nodrag" type="range" min={0} max={steps.length - 1} value={idx}
+          <input className="slider nodrag" type="range" aria-label="Liquidez mínima (média de 21 dias)" min={0} max={steps.length - 1} value={idx}
             onChange={(e) => onParams({ min: steps[Number(e.target.value)] * 1e6 })} />
           <Num value={mi} step={0.5} suffix={`${MKT.cur} mi (média 21d)`} onChange={(v) => onParams({ min: v * 1e6 })} />
         </div>

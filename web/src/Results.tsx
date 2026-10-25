@@ -61,7 +61,7 @@ export default function Results({ runId, done, ev, total, failed, selected, onSe
         <button className="btn sm csv" disabled={!sorted.length} title="CSV com ; e vírgula decimal (abre direto no Excel)"
           onClick={() => { track("csv_export", { result_count: sorted.length }); downloadCsv(`monitor-b3-${new Date().toISOString().slice(0, 10)}.csv`, toCsv(sorted, (r) => (ev.hits.get(r.t) ?? []).map((h) => hitLabel(h, r)).join(" | "))); }}>↓ Exportar CSV</button>
         {compact && (
-          <select className="ed-sel" value={sort.k} onChange={(e) => setSort({ k: e.target.value, d: -1 })}>
+          <select className="ed-sel" aria-label="Ordenar por" value={sort.k} onChange={(e) => setSort({ k: e.target.value, d: -1 })}>
             {COLS.slice(2).map((c) => <option key={c.k} value={c.k}>{c.l}</option>)}
           </select>
         )}
